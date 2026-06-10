@@ -1,12 +1,9 @@
 import sqlite3
-from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from src.core.cache import (
     CACHE_SCHEMA,
-    build_cache_db,
     build_cache_db_streaming,
     read_cache_df,
 )
@@ -41,78 +38,6 @@ class FakeStreamingDB:
         return pd.DataFrame(out, columns=["key", "value", "count_all"])
 
 
-# --- build_cache_db -------------------------------------------------------
-
-
-def test_build_cache_db_writes_file(tmp_path):
-    out = tmp_path / "cache.sqlite"
-    df = pd.DataFrame(
-        {
-            "key": ["landuse", "natural"],
-            "value": ["farmland", "water"],
-            "count_all": [10_000, 5_000],
-        }
-    )
-    build_cache_db(df, out)
-    assert out.exists()
-    assert out.stat().st_size > 0
-
-
-def test_build_cache_db_creates_table_with_expected_schema(tmp_path):
-    out = tmp_path / "cache.sqlite"
-    df = pd.DataFrame(
-        {
-            "key": ["landuse"],
-            "value": ["farmland"],
-            "count_all": [10_000],
-        }
-    )
-    build_cache_db(df, out)
-
-    with sqlite3.connect(out) as conn:
-        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = {r[0] for r in cur.fetchall()}
-    assert "tag_features" in tables
-
-
-def test_build_cache_db_persists_rows_with_feature_column(tmp_path):
-    out = tmp_path / "cache.sqlite"
-    df = pd.DataFrame(
-        {
-            "key": ["Landuse", "natural"],
-            "value": [" Farmland ", "water"],
-            "count_all": [10_000, 5_000],
-        }
-    )
-    build_cache_db(df, out)
-
-    with sqlite3.connect(out) as conn:
-        rows = conn.execute(
-            "SELECT key, value, count_all, feature FROM tag_features ORDER BY count_all DESC"
-        ).fetchall()
-    assert rows == [
-        ("landuse", "farmland", 10_000, "landuse|farmland"),
-        ("natural", "water", 5_000, "natural|water"),
-    ]
-
-
-def test_build_cache_db_replaces_existing_file(tmp_path):
-    out = tmp_path / "cache.sqlite"
-    out.touch()
-    df = pd.DataFrame({"key": ["a"], "value": ["b"], "count_all": [1]})
-    build_cache_db(df, out)
-    with sqlite3.connect(out) as conn:
-        n = conn.execute("SELECT COUNT(*) FROM tag_features").fetchone()[0]
-    assert n == 1
-
-
-def test_build_cache_db_missing_column_raises(tmp_path):
-    out = tmp_path / "cache.sqlite"
-    df = pd.DataFrame({"foo": ["bar"]})
-    with pytest.raises(KeyError):
-        build_cache_db(df, out)
-
-
 # --- read_cache_df --------------------------------------------------------
 
 
@@ -125,8 +50,9 @@ def test_read_cache_df_round_trip(tmp_path):
             "count_all": [10_000, 5_000],
         }
     )
-    build_cache_db(src, out)
-
+    build_cache_db_streaming(FakeStreamingDB([("landuse", "farmland", 10_000),
+                                              ("natural", "water", 5_000)]), out,
+                             min_count=500, batch_size=10)
     df = read_cache_df(out)
     assert list(df.columns) == ["key", "value", "count_all", "feature"]
     assert list(zip(df["key"], df["value"])) == [
@@ -137,15 +63,13 @@ def test_read_cache_df_round_trip(tmp_path):
 
 def test_read_cache_df_supports_min_count_filter(tmp_path):
     out = tmp_path / "cache.sqlite"
-    build_cache_db(
-        pd.DataFrame(
-            {
-                "key": ["a", "b", "c"],
-                "value": ["x", "y", "z"],
-                "count_all": [1_000, 500, 100],
-            }
+    build_cache_db_streaming(
+        FakeStreamingDB(
+            [("a", "x", 1_000), ("b", "y", 500), ("c", "z", 100)]
         ),
         out,
+        min_count=500,
+        batch_size=10,
     )
     df = read_cache_df(out, min_count=500)
     assert len(df) == 2

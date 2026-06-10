@@ -1,17 +1,16 @@
 """High-level audit operations on an OSM taginfo database.
 
 This module is the place to add domain logic (e.g. 'top values for a key').
-It depends on the small :class:`~src.exporter.DB` protocol, not on the concrete
-:class:`~src.database.OSMDatabase`, which keeps it unit-testable with a fake.
+It depends on the small :class:`~src.core.types.DB` protocol, not on the
+concrete :class:`~src.database.OSMDatabase`, which keeps it unit-testable
+with a fake.
 """
 from __future__ import annotations
 
-from typing import Optional, Protocol, Tuple
-
 import pandas as pd
 
-from src.io.exporter import DB
 from src.core.queries import QueryBuilder
+from src.core.types import DB
 
 
 class OSMTagAuditor:

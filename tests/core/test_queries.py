@@ -9,10 +9,35 @@ def test_paramless_constants_are_sql_params_tuples():
     # ``(sql, params)`` tuples so a single execute_query(sql, params)
     # call site works for every query.
     for name in ("TOP_KEYS", "TOP_TAGS", "METADATA",
-                 "GLOBAL_KEY_AGGREGATES", "GLOBAL_TAG_AGGREGATES"):
+                 "GLOBAL_KEY_AGGREGATES", "GLOBAL_TAG_AGGREGATES",
+                 "TAG_FEATURES_INSERT", "TAG_FEATURES_INDEX"):
         sql, params = getattr(QueryBuilder, name)
         assert isinstance(sql, str)
         assert params == ()
+
+
+def test_tag_features_select_query_filters_by_min_count():
+    sql, params = QueryBuilder.tag_features_select(min_count=500)
+    assert "tag_features" in sql
+    assert "count_all >= ?" in sql
+    assert "ORDER BY count_all DESC" in sql
+    assert params == (500,)
+
+
+def test_first_tags_by_min_count_no_upper_bound():
+    sql, params = QueryBuilder.first_tags_by_min_count(500, 1000)
+    assert "count_all >= ?" in sql
+    assert "<" not in sql  # no upper bound on the first page
+    assert "LIMIT ?" in sql
+    assert params == (500, 1000)
+
+
+def test_next_tags_by_min_count_strict_upper_bound():
+    sql, params = QueryBuilder.next_tags_by_min_count(500, 1234, 1000)
+    assert "count_all >= ?" in sql
+    assert "count_all < ?" in sql
+    assert "LIMIT ?" in sql
+    assert params == (500, 1234, 1000)
 
 
 # --- QueryBuilder ---------------------------------------------------------

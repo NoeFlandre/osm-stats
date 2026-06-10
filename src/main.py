@@ -24,7 +24,7 @@ from src.config import (
     resolve_db_path,
 )
 from src.core.audit import OSMTagAuditor
-from src.core.cache import build_cache_db, build_cache_db_streaming, read_cache_df
+from src.core.cache import build_cache_db_streaming, read_cache_df
 from src.core.database import OSMDatabase
 from src.core.summary import SummaryBuilder
 from src.io.exporter import DataExporter

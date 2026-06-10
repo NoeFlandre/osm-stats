@@ -62,6 +62,27 @@ class QueryBuilder:
         (),
     )
 
+    TAG_FEATURES_INSERT = (
+        "INSERT OR IGNORE INTO tag_features (key, value, count_all, feature) "
+        "VALUES (?, ?, ?, ?);",
+        (),
+    )
+
+    TAG_FEATURES_INDEX = (
+        "CREATE INDEX IF NOT EXISTS idx_features_count "
+        "ON tag_features(count_all DESC);",
+        (),
+    )
+
+    @staticmethod
+    def tag_features_select(min_count: int) -> Tuple[str, tuple]:
+        """Select tag_features rows with ``count_all >= min_count``, ordered DESC."""
+        sql = (
+            "SELECT key, value, count_all, feature FROM tag_features "
+            "WHERE count_all >= ? ORDER BY count_all DESC;"
+        )
+        return sql, (min_count,)
+
     @staticmethod
     def select_tag_values(key: str, limit: int = 50) -> Tuple[str, tuple]:
         """Top values for a given ``key`` in the ``tags`` table."""
@@ -75,44 +96,22 @@ class QueryBuilder:
         return sql, (key, limit)
 
     @staticmethod
-    def tags_by_min_count(
-        min_count: int = 500, limit: int | None = None
-    ) -> Tuple[str, tuple]:
-        """All (key, value) pairs with ``count_all >= min_count``, ordered DESC.
-
-        Used as the long-tail filter at the start of the analysis pipeline.
-        If *limit* is set, the result is capped to that many rows.
-        """
+    def first_tags_by_min_count(min_count: int, batch_size: int) -> Tuple[str, tuple]:
+        """First page of the thresholded tags scan (no upper bound)."""
         sql = """
         SELECT key, value, count_all
         FROM tags
         WHERE count_all >= ?
         ORDER BY count_all DESC
+        LIMIT ?;
         """
-        if limit is None:
-            return sql + ";", (min_count,)
-        return sql + "LIMIT ?;", (min_count, limit)
+        return sql, (min_count, batch_size)
 
     @staticmethod
-    def iter_tags_by_min_count(
-        min_count: int, batch_size: int, after_count: int | None = None
+    def next_tags_by_min_count(
+        min_count: int, after_count: int, batch_size: int
     ) -> Tuple[str, tuple]:
-        """Keyset-paginated iterator over the thresholded tags table.
-
-        Yields ``(key, value, count_all)`` rows with ``count_all >= min_count``,
-        strictly less than *after_count* on subsequent calls. The caller is
-        responsible for advancing *after_count*; the first call passes
-        ``None`` (or omits the keyset entirely).
-        """
-        if after_count is None:
-            sql = """
-            SELECT key, value, count_all
-            FROM tags
-            WHERE count_all >= ?
-            ORDER BY count_all DESC
-            LIMIT ?;
-            """
-            return sql, (min_count, batch_size)
+        """Subsequent page of the thresholded tags scan, strictly below *after_count*."""
         sql = """
         SELECT key, value, count_all
         FROM tags
