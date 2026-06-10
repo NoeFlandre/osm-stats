@@ -1,8 +1,9 @@
 import os
 import pandas as pd
 from pathlib import Path
-from database import OSMDatabase
-import queries
+from src.database import OSMDatabase
+from src.exporter import DataExporter
+import src.queries as queries
 
 DB_PATH = "/Volumes/Seagate M3/taginfo.sqlite"
 OUTPUT_DIR = Path("output")
@@ -10,14 +11,13 @@ OUTPUT_DIR = Path("output")
 def main():
     print("Initializing OSM Database analysis...")
     
-    # Ensure output directory exists
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    
     try:
         db = OSMDatabase(DB_PATH)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         return
+
+    exporter = DataExporter(db, OUTPUT_DIR)
 
     print("Extracting global aggregates...")
     df_key_agg = db.execute_query(queries.GLOBAL_KEY_AGGREGATES_QUERY)
@@ -44,20 +44,14 @@ def main():
     print(df_summary.to_string(index=False))
     print("----------------------\n")
 
-    # 1. Extract Metadata
     print("Extracting metadata...")
-    df_meta = db.execute_query(queries.METADATA_QUERY)
-    df_meta.to_csv(OUTPUT_DIR / "metadata.csv", index=False)
+    exporter.export_query(queries.METADATA_QUERY, "metadata.csv")
     
-    # 2. Extract Top Keys
     print("Extracting top keys...")
-    df_keys = db.execute_query(queries.TOP_KEYS_QUERY)
-    df_keys.to_csv(OUTPUT_DIR / "top_10_keys.csv", index=False)
+    exporter.export_query(queries.TOP_KEYS_QUERY, "top_10_keys.csv")
     
-    # 3. Extract Top Tags
     print("Extracting top tags...")
-    df_tags = db.execute_query(queries.TOP_TAGS_QUERY)
-    df_tags.to_csv(OUTPUT_DIR / "top_10_tags.csv", index=False)
+    exporter.export_query(queries.TOP_TAGS_QUERY, "top_10_tags.csv")
     
     print("Analysis complete! Results saved to the 'output' directory.")
 
