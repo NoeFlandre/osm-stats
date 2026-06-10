@@ -26,31 +26,13 @@ from src.config import (
 from src.core.audit import OSMTagAuditor
 from src.core.cache import build_cache_db, build_cache_db_streaming, read_cache_df
 from src.core.database import OSMDatabase
-from src.core.loader import load_and_threshold
-from src.core.queries import QueryBuilder
+from src.core.summary import SummaryBuilder
 from src.io.exporter import DataExporter
 
 
 def build_summary(db: OSMDatabase) -> pd.DataFrame:
     """Aggregate the global key/tag totals into a single tidy DataFrame."""
-    df_key_agg = db.execute_query(QueryBuilder.GLOBAL_KEY_AGGREGATES)
-    df_tag_agg = db.execute_query(QueryBuilder.GLOBAL_TAG_AGGREGATES)
-    return pd.DataFrame(
-        {
-            "metric": [
-                "total_distinct_keys",
-                "total_key_occurrences",
-                "total_distinct_tags",
-                "total_tag_occurrences",
-            ],
-            "value": [
-                df_key_agg["total_distinct_keys"].iloc[0],
-                df_key_agg["total_key_occurrences"].iloc[0],
-                df_tag_agg["total_distinct_tags"].iloc[0],
-                df_tag_agg["total_tag_occurrences"].iloc[0],
-            ],
-        }
-    )
+    return SummaryBuilder(db).build().to_dataframe()
 
 
 def build_feature_cache(

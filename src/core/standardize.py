@@ -5,42 +5,18 @@ collapses each pair into one lowercase, whitespace-stripped string of the
 form ``"key|value"``. ``|`` is chosen as the delimiter because it almost
 never appears in real OSM tag values, which keeps the feature string
 unambiguously parseable later.
+
+The single public API is :func:`standardize_dataframe`. It normalizes the
+``key`` and ``value`` columns in place (in a copy) and adds a new ``feature``
+column. The vectorized normalizer :func:`_normalize_column` is the one and
+only place that knows how to turn any input into a clean token.
 """
 from __future__ import annotations
-
-from typing import Optional, Union
 
 import pandas as pd
 
 DELIMITER = "|"
 MISSING_VALUE_TOKEN = "none"
-
-
-def build_feature_string(
-    key: Union[str, None],
-    value: Union[str, None],
-) -> str:
-    """Return ``"<key>|<value>"`` normalized to lowercase and stripped.
-
-    Empty or missing values become the ``"none"`` token, so the feature
-    string always has exactly one delimiter and is safely splittable.
-    """
-    k = (str(key) if key is not None else "").strip().lower() or MISSING_VALUE_TOKEN
-    v = (str(value) if value is not None else "").strip().lower() or MISSING_VALUE_TOKEN
-    return f"{k}{DELIMITER}{v}"
-
-
-def build_feature_series(df: pd.DataFrame) -> pd.Series:
-    """Vectorized version of :func:`build_feature_string` over a DataFrame.
-
-    Expects columns ``"key"`` and ``"value"``; both are coerced to string,
-    lowercased, and stripped before joining.
-    """
-    keys = df["key"].astype("string").fillna("").str.strip().str.lower()
-    values = df["value"].astype("string").fillna("").str.strip().str.lower()
-    keys = keys.where(keys != "", MISSING_VALUE_TOKEN)
-    values = values.where(values != "", MISSING_VALUE_TOKEN)
-    return keys + DELIMITER + values
 
 
 def _normalize_column(series: pd.Series) -> pd.Series:

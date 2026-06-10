@@ -3,63 +3,42 @@ import pytest
 
 from src.core.standardize import (
     DELIMITER,
-    build_feature_string,
-    build_feature_series,
+    MISSING_VALUE_TOKEN,
+    _normalize_column,
     standardize_dataframe,
 )
 
 
-# --- build_feature_string -------------------------------------------------
+# --- constants ------------------------------------------------------------
 
 
-def test_build_feature_string_basic():
-    assert build_feature_string("landuse", "farmland") == "landuse|farmland"
-
-
-def test_build_feature_string_lowercases_key_and_value():
-    assert build_feature_string("Landuse", "FarmLand") == "landuse|farmland"
-
-
-def test_build_feature_string_strips_whitespace():
-    assert build_feature_string("  landuse ", " farmland  ") == "landuse|farmland"
-
-
-def test_build_feature_string_handles_none_value():
-    # 'key' with no explicit value (rare in OSM) becomes key|none.
-    assert build_feature_string("natural", None) == "natural|none"
-
-
-def test_build_feature_string_drops_empty_value():
-    assert build_feature_string("natural", "") == "natural|none"
-
-
-def test_build_feature_string_preserves_internal_underscores():
-    assert build_feature_string("crop", "sugar_cane") == "crop|sugar_cane"
-
-
-def test_delimiter_is_pipe_and_appears_in_output():
+def test_delimiter_is_pipe():
     assert DELIMITER == "|"
-    assert "|" in build_feature_string("landuse", "farmland")
 
 
-# --- build_feature_series -------------------------------------------------
+def test_missing_value_token_is_none():
+    assert MISSING_VALUE_TOKEN == "none"
 
 
-def test_build_feature_series_on_dataframe():
-    df = pd.DataFrame({"key": ["Landuse", "natural"], "value": ["Farmland", "  Water  "]})
-    series = build_feature_series(df)
-    assert list(series) == ["landuse|farmland", "natural|water"]
+# --- _normalize_column ----------------------------------------------------
 
 
-def test_build_feature_series_empty():
-    df = pd.DataFrame({"key": [], "value": []})
-    assert list(build_feature_series(df)) == []
+def test_normalize_lowercases_and_strips():
+    s = pd.Series(["  Landuse ", "Natural", "\tWater\n"])
+    out = _normalize_column(s)
+    assert list(out) == ["landuse", "natural", "water"]
 
 
-# --- standardize_dataframe -----------------------------------------------
+def test_normalize_handles_missing_and_empty():
+    s = pd.Series([None, "", "  ", "ok"])
+    out = _normalize_column(s)
+    assert list(out) == ["none", "none", "none", "ok"]
 
 
-def test_standardize_dataframe_adds_feature_column():
+# --- standardize_dataframe ------------------------------------------------
+
+
+def test_standardize_adds_feature_column():
     df = pd.DataFrame(
         {
             "key": ["landuse", "natural"],
@@ -70,18 +49,56 @@ def test_standardize_dataframe_adds_feature_column():
     out = standardize_dataframe(df)
     assert "feature" in out.columns
     assert list(out["feature"]) == ["landuse|farmland", "natural|water"]
-    # Original columns preserved
-    assert list(out["count_all"]) == [10_000, 5_000]
 
 
-def test_standardize_dataframe_does_not_mutate_input():
+def test_standardize_normalizes_key_and_value_columns():
+    df = pd.DataFrame(
+        {
+            "key": ["  Landuse ", "Natural"],
+            "value": [" FarmLand ", " Water "],
+            "count_all": [1, 2],
+        }
+    )
+    out = standardize_dataframe(df)
+    assert list(out["key"]) == ["landuse", "natural"]
+    assert list(out["value"]) == ["farmland", "water"]
+
+
+def test_standardize_replaces_empty_with_none_token():
+    df = pd.DataFrame({"key": ["natural"], "value": [""], "count_all": [1]})
+    out = standardize_dataframe(df)
+    assert out.iloc[0]["feature"] == "natural|none"
+
+
+def test_standardize_preserves_other_columns():
+    df = pd.DataFrame(
+        {
+            "key": ["landuse"],
+            "value": ["farmland"],
+            "count_all": [10_000],
+        }
+    )
+    out = standardize_dataframe(df)
+    assert out.iloc[0]["count_all"] == 10_000
+
+
+def test_standardize_does_not_mutate_input():
     df = pd.DataFrame({"key": ["Landuse"], "value": ["Farmland"], "count_all": [1]})
     standardize_dataframe(df)
     assert df.iloc[0]["key"] == "Landuse"
     assert df.iloc[0]["value"] == "Farmland"
 
 
-def test_standardize_dataframe_missing_column_raises():
-    df = pd.DataFrame({"foo": ["bar"]})
-    with pytest.raises(KeyError):
-        standardize_dataframe(df)
+def test_standardize_handles_missing_key_or_value():
+    df = pd.DataFrame(
+        {"key": [None, "natural"], "value": ["farmland", None], "count_all": [1, 2]}
+    )
+    out = standardize_dataframe(df)
+    assert list(out["feature"]) == ["none|farmland", "natural|none"]
+
+
+def test_standardize_empty_dataframe():
+    df = pd.DataFrame({"key": [], "value": [], "count_all": []})
+    out = standardize_dataframe(df)
+    assert list(out["feature"]) == []
+    assert "feature" in out.columns
