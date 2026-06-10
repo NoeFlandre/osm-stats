@@ -14,6 +14,10 @@ PathLike = Union[str, os.PathLike]
 DEFAULT_DB_PATH: PathLike = "/Volumes/Seagate M3/taginfo.sqlite"
 ENV_VAR = "OSM_DB_PATH"
 DEFAULT_OUTPUT_DIR: Path = Path("output")
+# The cache lives next to the source DB on the Seagate drive so we don't fill
+# the laptop SSD with the 14 GB working set. Override via --cache-path.
+DEFAULT_CACHE_PATH: Path = Path("/Volumes/Seagate M3/tag_features.sqlite")
+DEFAULT_THRESHOLD: int = 500
 
 
 def resolve_db_path(env: Mapping[str, str] | None = None) -> Path:

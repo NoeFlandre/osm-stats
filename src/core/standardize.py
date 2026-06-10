@@ -43,11 +43,20 @@ def build_feature_series(df: pd.DataFrame) -> pd.Series:
     return keys + DELIMITER + values
 
 
-def standardize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy of *df* with an added ``"feature"`` column.
+def _normalize_column(series: pd.Series) -> pd.Series:
+    """Lowercase, strip, and replace empty strings with the missing-value token."""
+    out = series.astype("string").fillna("").str.strip().str.lower()
+    return out.where(out != "", MISSING_VALUE_TOKEN)
 
-    Original columns are preserved and the input is not mutated.
+
+def standardize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy of *df* with ``key`` and ``value`` normalized and a new ``feature`` column.
+
+    Normalization is lowercase + strip + missing-value token. The input
+    DataFrame is not mutated.
     """
     out = df.copy()
-    out["feature"] = build_feature_series(out)
+    out["key"] = _normalize_column(out["key"])
+    out["value"] = _normalize_column(out["value"])
+    out["feature"] = out["key"] + DELIMITER + out["value"]
     return out

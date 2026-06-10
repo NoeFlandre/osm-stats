@@ -80,6 +80,35 @@ class QueryBuilder:
             return sql + ";", (min_count,)
         return sql + "LIMIT ?;", (min_count, limit)
 
+    @staticmethod
+    def iter_tags_by_min_count(
+        min_count: int, batch_size: int, after_count: int | None = None
+    ) -> Tuple[str, tuple]:
+        """Keyset-paginated iterator over the thresholded tags table.
+
+        Yields ``(key, value, count_all)`` rows with ``count_all >= min_count``,
+        strictly less than *after_count* on subsequent calls. The caller is
+        responsible for advancing *after_count*; the first call passes
+        ``None`` (or omits the keyset entirely).
+        """
+        if after_count is None:
+            sql = """
+            SELECT key, value, count_all
+            FROM tags
+            WHERE count_all >= ?
+            ORDER BY count_all DESC
+            LIMIT ?;
+            """
+            return sql, (min_count, batch_size)
+        sql = """
+        SELECT key, value, count_all
+        FROM tags
+        WHERE count_all >= ? AND count_all < ?
+        ORDER BY count_all DESC
+        LIMIT ?;
+        """
+        return sql, (min_count, after_count, batch_size)
+
 
 def get_tag_values_query(key: str, limit: int = 50) -> str:
     """.. deprecated::
