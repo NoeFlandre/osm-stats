@@ -13,8 +13,17 @@ import pandas as pd
 
 
 def _escape_cell(value: str) -> str:
-    """Escape Markdown-significant characters in a single table cell."""
-    return str(value).replace("|", "\\|")
+    """Escape Markdown-significant characters in a single table cell.
+
+    Only pipes that are not already escaped (``\\|``) are replaced. This
+    prevents double-escaping data that was emitted by an earlier render
+    step (e.g. a medoid string read back from ``cluster_profile.md``).
+    """
+    s = str(value)
+    placeholder = "\x00ESCAPED\x00"
+    s = s.replace("\\|", placeholder)
+    s = s.replace("|", "\\|")
+    return s.replace(placeholder, "\\|")
 
 
 def render_profile_markdown(profile: pd.DataFrame) -> str:
