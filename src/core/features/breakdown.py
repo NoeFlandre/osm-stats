@@ -1,81 +1,59 @@
 """Per-cluster breakdown for the env/agri whitelist.
 
-The cluster profile (``output/cluster_profile.md``) emits one row per
-base key, with the top-N representative medoids joined with ``"; "``.
-The breakdown expands those representative medoids into a flat
-per-cluster view, restricted to the env/agri whitelist, and renders it
-as a Markdown table with one row per cluster.
+The cluster step persists a per-cluster medoid file
+(``output/cluster_medoids.csv``) with one row per real cluster. The
+breakdown filters that file to the whitelisted env/agri base keys and
+renders it as a Markdown table with one row per cluster.
+
+Each row carries the real per-cluster ``cluster_id`` and the real
+per-cluster ``total_count_all`` (the sum of ``count_all`` across the
+cluster's members). This is not a recomputation: the breakdown is a
+filter on the persisted medoid file.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pandas as pd
 
+from src.core.features.base_key import parse_base_key
 from src.core.features.env_agri_whitelist import ENVI_AGRI_BASE_KEYS
 from src.core.features.render import _escape_cell  # reuse the escape helper
 
 
-_PROFILE_PATH = Path("output/cluster_profile.md")
+MEDOIDS_PATH = Path("output/cluster_medoids.csv")
 
 
-def _parse_profile() -> list[dict]:
-    md = _PROFILE_PATH.read_text()
-    rows = []
-    for line in md.splitlines():
-        if not line.startswith("| ") or "base_key" in line or line.startswith("| ---"):
-            continue
-        # Split only on un-escaped pipes: replace escaped pipes with a
-        # placeholder, split, then restore.
-        placeholder = "\x00PIPE\x00"
-        cleaned = line.replace("\\|", placeholder)
-        cells = [c.strip() for c in cleaned.split("|")]
-        cells = [c.replace(placeholder, "\\|") for c in cells]
-        if len(cells) < 5:
-            continue
-        bk = cells[1]
-        if not bk or bk == "---":
-            continue
-        rows.append(
-            {
-                "base_key": bk,
-                "cluster_count": int(cells[2].replace(",", "")),
-                "total_count_all": int(cells[3].replace(",", "")),
-                "medoids": [m for m in cells[4].split("; ") if m],
-            }
+def _load_medoids() -> pd.DataFrame:
+    """Load the persisted per-cluster medoid file.
+
+    The medoid file has columns ``cluster_id``, ``medoid_feature``,
+    ``cluster_size``, ``total_count_all``. The noise bucket (label -1)
+    is included; its ``medoid_feature`` is the top noise feature.
+    """
+    if not MEDOIDS_PATH.exists():
+        raise FileNotFoundError(
+            f"missing {MEDOIDS_PATH}: re-run scripts/profile_clusters.py "
+            f"to produce the per-cluster medoid file"
         )
-    return rows
+    df = pd.read_csv(MEDOIDS_PATH)
+    return df
 
 
 def env_agri_breakdown_df() -> pd.DataFrame:
-    """One row per representative cluster medoid, restricted to the
-    env/agri whitelist. Each row carries the medoid, its synthetic
-    cluster_id (sequential 0..N-1 within the base key), and the
-    total_count_all of the parent base key (so the user can see the
-    family-level volume even though per-cluster counts aren't stored
-    on disk).
+    """One row per real cluster whose base key is in the env/agri whitelist.
+
+    Columns: ``base_key``, ``cluster_id``, ``medoid``, ``cluster_size``,
+    ``total_count_all``. Sorted by ``total_count_all`` descending.
     """
-    rows: list[dict] = []
-    cid = 0
-    for entry in _parse_profile():
-        if entry["base_key"] not in ENVI_AGRI_BASE_KEYS:
-            continue
-        for medoid in entry["medoids"]:
-            rows.append(
-                {
-                    "base_key": entry["base_key"],
-                    "cluster_id": cid,
-                    "medoid": medoid,
-                    "cluster_size": entry["cluster_count"],
-                    "total_count_all": entry["total_count_all"],
-                }
-            )
-            cid += 1
-    return pd.DataFrame(
-        rows,
-        columns=["base_key", "cluster_id", "medoid", "cluster_size", "total_count_all"],
-    )
+    src = _load_medoids()
+    src = src.copy()
+    src["base_key"] = src["medoid_feature"].map(parse_base_key)
+    src = src[src["base_key"].isin(ENVI_AGRI_BASE_KEYS)]
+    src = src.rename(columns={"medoid_feature": "medoid"})
+    src = src[["base_key", "cluster_id", "medoid", "cluster_size", "total_count_all"]]
+    src = src.sort_values("total_count_all", ascending=False).reset_index(drop=True)
+    return src
 
 
 def render_breakdown_markdown(df: pd.DataFrame) -> str:

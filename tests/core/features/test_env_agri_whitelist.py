@@ -28,8 +28,8 @@ def test_whitelist_is_subset_of_cluster_base_keys():
     cluster_keys = _cluster_base_keys()
     missing = set(ENVI_AGRI_BASE_KEYS) - cluster_keys
     assert not missing, (
-        f"whitelist contains base keys not in the 426 cluster families: "
-        f"{sorted(missing)}"
+        f"whitelist contains base keys not in the cluster families "
+        f"({len(cluster_keys)} keys in the current run): {sorted(missing)}"
     )
 
 

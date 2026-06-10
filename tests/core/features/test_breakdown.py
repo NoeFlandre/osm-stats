@@ -1,14 +1,16 @@
-"""The env/agri breakdown must produce one row per representative
-cluster medoid for the whitelisted base keys, with cluster_id and the
-medoid feature for traceability.
+"""The env/agri breakdown must produce one row per real cluster for
+the whitelisted base keys, sourced from a persisted per-cluster
+medoid file (``output/cluster_medoids.parquet``) that carries the
+true per-cluster occurrence total.
 
-The representative medoids come from ``output/cluster_profile.md``,
-where the cluster-profile step emits the top-N medoids per base key
-sorted by ``total_count_all`` descending. The breakdown expands those
-into a flat per-cluster view for the env/agri whitelist.
+The breakdown is built bottom-up from the cluster medoid file (not
+the cluster profile Markdown), so each row reflects one real cluster
+with its real ``cluster_id``, ``cluster_size`` (number of members),
+and ``total_count_all`` (sum of occurrences across those members).
 """
 from pathlib import Path
-import re
+
+import pandas as pd
 
 from src.core.features.env_agri_whitelist import ENVI_AGRI_BASE_KEYS
 from src.core.features.breakdown import (
@@ -17,26 +19,19 @@ from src.core.features.breakdown import (
 )
 
 
-def _profile_rows():
-    md = Path("output/cluster_profile.md").read_text()
-    rows = []
-    placeholder = "\x00PIPE\x00"
-    for line in md.splitlines():
-        if not line.startswith("| ") or "base_key" in line or line.startswith("| ---"):
-            continue
-        cleaned = line.replace("\\|", placeholder)
-        cells = [c.strip() for c in cleaned.split("|")]
-        cells = [c.replace(placeholder, "\\|") for c in cells]
-        if len(cells) < 5:
-            continue
-        bk = cells[1]
-        if not bk or bk == "---":
-            continue
-        cc = int(cells[2].replace(",", ""))
-        tc = int(cells[3].replace(",", ""))
-        meds = [m for m in cells[4].split("; ") if m]
-        rows.append((bk, cc, tc, meds))
-    return rows
+MEDOIDS_PATH = Path("output/cluster_medoids.csv")
+
+
+# --- medoid file existence ---------------------------------------------
+
+
+def test_medoids_parquet_exists():
+    """The pipeline must persist per-cluster medoids so the breakdown
+    can read real per-cluster counts without re-running HDBSCAN."""
+    assert MEDOIDS_PATH.exists(), (
+        f"missing {MEDOIDS_PATH}: re-run scripts/profile_clusters.py to "
+        f"produce the per-cluster medoid file"
+    )
 
 
 # --- env_agri_breakdown_df ---------------------------------------------
@@ -45,36 +40,55 @@ def _profile_rows():
 def test_breakdown_returns_dataframe():
     df = env_agri_breakdown_df()
     assert not df.empty
-    assert list(df.columns) == ["base_key", "cluster_id", "medoid", "cluster_size", "total_count_all"]
+    expected_cols = ["base_key", "cluster_id", "medoid", "cluster_size", "total_count_all"]
+    assert list(df.columns) == expected_cols
 
 
 def test_breakdown_only_contains_whitelisted_base_keys():
     df = env_agri_breakdown_df()
     assert set(df["base_key"]) <= ENVI_AGRI_BASE_KEYS
 
+
 def test_breakdown_cluster_ids_are_unique():
     df = env_agri_breakdown_df()
     assert df["cluster_id"].is_unique
 
-def test_breakdown_total_clusters_matches_profile_aggregate():
-    df = env_agri_breakdown_df()
-    profile_rows = _profile_rows()
-    # The profile emits the top-N medoids per base key. The breakdown
-    # expands those into one row per medoid, so the row count equals
-    # the sum of representative medoids over the whitelisted base keys.
-    expected = sum(len(meds) for bk, _, _, meds in profile_rows if bk in ENVI_AGRI_BASE_KEYS)
-    assert len(df) == expected
 
-def test_breakdown_total_count_all_does_not_exceed_profile_aggregate():
-    # The breakdown emits the per-base-key total_count_all on every
-    # medoid row (we don't have per-cluster counts on disk). Summing
-    # across medoids for a base key therefore over-counts, but each
-    # individual row's value must match the per-base-key total.
+def test_breakdown_cluster_size_is_integer():
     df = env_agri_breakdown_df()
-    profile_rows = _profile_rows()
-    by_key = {bk: tc for bk, _, tc, _ in profile_rows}
+    # ``cluster_size`` is the number of OSM tag features that landed
+    # in the cluster. It must be a positive integer.
+    assert pd.api.types.is_integer_dtype(df["cluster_size"])
+    assert (df["cluster_size"] > 0).all()
+
+
+def test_breakdown_total_count_all_is_integer():
+    df = env_agri_breakdown_df()
+    # ``total_count_all`` is the sum of ``count_all`` across the
+    # cluster's members. It must be a positive integer.
+    assert pd.api.types.is_integer_dtype(df["total_count_all"])
+    assert (df["total_count_all"] > 0).all()
+
+
+def test_breakdown_per_cluster_count_matches_medoid_file():
+    """Each row's total_count_all must equal the same field in the
+    persisted medoid file. The breakdown is a filter on that file,
+    not a recomputation."""
+    df = env_agri_breakdown_df()
+    src = pd.read_csv(MEDOIDS_PATH)
+    src_by_id = src.set_index("cluster_id")
     for _, row in df.iterrows():
-        assert int(row["total_count_all"]) == by_key[row["base_key"]]
+        cid = int(row["cluster_id"])
+        assert int(row["total_count_all"]) == int(src_by_id.loc[cid, "total_count_all"])
+
+
+def test_breakdown_medoid_matches_medoid_file():
+    df = env_agri_breakdown_df()
+    src = pd.read_csv(MEDOIDS_PATH)
+    src_by_id = src.set_index("cluster_id")
+    for _, row in df.iterrows():
+        cid = int(row["cluster_id"])
+        assert row["medoid"] == src_by_id.loc[cid, "medoid_feature"]
 
 
 # --- render_breakdown_markdown -----------------------------------------
@@ -94,7 +108,11 @@ def test_render_has_header_and_separator():
 def test_render_includes_one_row_per_cluster():
     df = env_agri_breakdown_df()
     md = render_breakdown_markdown(df)
-    body_rows = [ln for ln in md.splitlines() if ln.startswith("| ") and "base_key" not in ln and "---" not in ln]
+    body_rows = [
+        ln
+        for ln in md.splitlines()
+        if ln.startswith("| ") and "base_key" not in ln and "---" not in ln
+    ]
     assert len(body_rows) == len(df)
 
 
@@ -102,26 +120,24 @@ def test_render_includes_medoid_for_every_cluster():
     df = env_agri_breakdown_df()
     md = render_breakdown_markdown(df)
     for medoid in df["medoid"]:
-        # The medoid in the rendered table has its '|' escaped.
-        # Empty medoids (some rows have no medoids) are skipped here.
         if not medoid:
             continue
-        # Source medoids are already in the form 'key\|value'. The
-        # renderer's escape preserves existing escapes and only escapes
-        # un-escaped pipes, so the output contains the original '\|'.
-        assert medoid in md
+        # The medoid in the rendered table has its '|' escaped.
+        assert medoid.replace("|", "\\|") in md
 
 
 def test_render_pipe_in_medoid_escaped():
     df = env_agri_breakdown_df()
     md = render_breakdown_markdown(df)
-    body_rows = [ln for ln in md.splitlines() if ln.startswith("| ") and "base_key" not in ln and "---" not in ln]
+    body_rows = [
+        ln
+        for ln in md.splitlines()
+        if ln.startswith("| ") and "base_key" not in ln and "---" not in ln
+    ]
     assert body_rows, "expected at least one body row"
     for line in body_rows:
-        # The breakdown has 5 columns (base_key, cluster_id, medoid,
-        # cluster_size, total_count_all). A well-formed body row has
-        # 6 top-level pipes (1 leading + 4 separators + 1 trailing),
-        # giving 7 cells when split on un-escaped pipes.
+        # 5 columns + leading '' + trailing '' = 7 cells when split on
+        # un-escaped pipes.
         cleaned = line.replace("\\|", "\x00")
         cells = [c.strip() for c in cleaned.split("|")]
         assert len(cells) == 7, f"row not 5 columns: {line!r}"

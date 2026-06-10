@@ -58,6 +58,14 @@ def main() -> None:
     OUTPUT.write_text(md + "\n")
     print(f"wrote: {OUTPUT}")
 
+    # Persist the per-cluster medoid DataFrame so downstream steps
+    # (env/agri breakdown, blog post) can read real per-cluster counts
+    # without re-running HDBSCAN.
+    import pandas as pd
+    medoids_path = OUTPUT.parent / "cluster_medoids.csv"
+    medoids.to_csv(medoids_path, index=False)
+    print(f"wrote: {medoids_path}  rows: {len(medoids):,}")
+
     print()
     print(profile.head(20).to_string(index=False))
 
