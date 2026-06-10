@@ -1,49 +1,82 @@
-import os
-import pandas as pd
+"""Entry point for the OSM taginfo analysis pipeline.
+
+Run with::
+
+    python -m src.main
+
+Override the database location with the ``OSM_DB_PATH`` environment variable.
+"""
+from __future__ import annotations
+
 from pathlib import Path
-from src.database import OSMDatabase
-from src.exporter import DataExporter
-import src.queries as queries
 
-DB_PATH = "/Volumes/Seagate M3/taginfo.sqlite"
-OUTPUT_DIR = Path("output")
+import pandas as pd
 
-def main():
+from src.config import DEFAULT_OUTPUT_DIR, resolve_db_path
+from src.core.audit import OSMTagAuditor
+from src.core.database import OSMDatabase
+from src.core.queries import QueryBuilder
+from src.io.exporter import DataExporter
+
+
+def build_summary(db: OSMDatabase) -> pd.DataFrame:
+    """Aggregate the global key/tag totals into a single tidy DataFrame."""
+    df_key_agg = db.execute_query(QueryBuilder.GLOBAL_KEY_AGGREGATES)
+    df_tag_agg = db.execute_query(QueryBuilder.GLOBAL_TAG_AGGREGATES)
+    return pd.DataFrame(
+        {
+            "metric": [
+                "total_distinct_keys",
+                "total_key_occurrences",
+                "total_distinct_tags",
+                "total_tag_occurrences",
+            ],
+            "value": [
+                df_key_agg["total_distinct_keys"].iloc[0],
+                df_key_agg["total_key_occurrences"].iloc[0],
+                df_tag_agg["total_distinct_tags"].iloc[0],
+                df_tag_agg["total_tag_occurrences"].iloc[0],
+            ],
+        }
+    )
+
+
+def run(db: OSMDatabase, output_dir: Path) -> pd.DataFrame:
+    """Execute the analysis pipeline against *db* and write results to *output_dir*.
+
+    Returns the building-audit DataFrame for inspection.
+    """
+    exporter = DataExporter(db, output_dir)
+
+    summary = build_summary(db)
+    summary.to_csv(output_dir / "global_summary.csv", index=False)
+
+    auditor = OSMTagAuditor(db)
+    df_building_audit = auditor.top_values("building", limit=50)
+    df_building_audit.to_csv(output_dir / "audit_building.csv", index=False)
+    return df_building_audit
+
+
+def main(output_dir: Path = DEFAULT_OUTPUT_DIR) -> int:
     print("Initializing OSM Database analysis...")
-    
+
+    db_path = resolve_db_path()
     try:
-        db = OSMDatabase(DB_PATH)
+        db = OSMDatabase(str(db_path))
     except FileNotFoundError as e:
         print(f"Error: {e}")
-        return
+        return 1
 
-    exporter = DataExporter(db, OUTPUT_DIR)
-
-    # Global summary
-    df_key_agg = db.execute_query(queries.GLOBAL_KEY_AGGREGATES_QUERY)
-    df_tag_agg = db.execute_query(queries.GLOBAL_TAG_AGGREGATES_QUERY)
-    
-    summary_data = {
-        "metric": ["total_distinct_keys", "total_key_occurrences", "total_distinct_tags", "total_tag_occurrences"],
-        "value": [
-            df_key_agg["total_distinct_keys"].iloc[0],
-            df_key_agg["total_key_occurrences"].iloc[0],
-            df_tag_agg["total_distinct_tags"].iloc[0],
-            df_tag_agg["total_tag_occurrences"].iloc[0]
-        ]
-    }
-    pd.DataFrame(summary_data).to_csv(OUTPUT_DIR / "global_summary.csv", index=False)
-    
-    # Audit 'building'
     print("Auditing 'building' key...")
-    audit_query = queries.get_tag_values_query('building', limit=50)
-    df_building_audit = exporter.export_query(audit_query, "audit_building.csv")
-    
+    df_building_audit = run(db, output_dir)
+
     print("\n--- Top 20 Building Tags ---")
     print(df_building_audit.head(20).to_string(index=False))
     print("----------------------------\n")
 
     print("Analysis complete! Results saved to the 'output' directory.")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
