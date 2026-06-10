@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.core.standardize import (
+from src.core.features.standardize import (
     DELIMITER,
     MISSING_VALUE_TOKEN,
     _normalize_column,

@@ -14,10 +14,10 @@ from typing import Callable, Optional
 import pandas as pd
 
 from src.config import DEFAULT_CACHE_PATH, DEFAULT_THRESHOLD
-from src.core.audit import OSMTagAuditor
-from src.core.cache import build_cache_db_streaming
-from src.core.database import OSMDatabase
-from src.core.summary import SummaryBuilder
+from src.core.storage.cache import build_cache_db_streaming
+from src.core.db.database import OSMDatabase
+from src.core.features.audit import OSMTagAuditor
+from src.core.features.summary import SummaryBuilder
 
 
 def build_summary(db: OSMDatabase) -> pd.DataFrame:

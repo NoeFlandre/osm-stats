@@ -1,4 +1,4 @@
-from src.core.types import DB
+from src.core.db.types import DB
 
 
 def test_db_is_a_protocol_with_execute_query():

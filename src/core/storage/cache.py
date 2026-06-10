@@ -19,8 +19,8 @@ from typing import Callable, Union
 
 import pandas as pd
 
-from src.core.queries import QueryBuilder
-from src.core.standardize import standardize_dataframe
+from src.core.db.queries import QueryBuilder
+from src.core.features.standardize import standardize_dataframe
 
 CACHE_SCHEMA = """
 CREATE TABLE tag_features (

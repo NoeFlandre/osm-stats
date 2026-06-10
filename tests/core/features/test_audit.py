@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
 
-from src.core.audit import OSMTagAuditor
-from src.core.database import OSMDatabase
+from src.core.db.database import OSMDatabase
+from src.core.features.audit import OSMTagAuditor
 
 
 class FakeDB:

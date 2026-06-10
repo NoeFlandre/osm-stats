@@ -21,10 +21,10 @@ from src.config import (
     DEFAULT_THRESHOLD,
     resolve_db_path,
 )
-from src.core.cache import read_cache_df
-from src.core.database import OSMDatabase
-from src.core.pipeline import build_feature_cache, run
-from src.core.progress import make_progress_reporter
+from src.core.storage.cache import read_cache_df
+from src.core.db.database import OSMDatabase
+from src.core.pipeline.pipeline import build_feature_cache, run
+from src.core.pipeline.progress import make_progress_reporter
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

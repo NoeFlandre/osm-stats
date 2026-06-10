@@ -1,7 +1,7 @@
 import sqlite3
 import pytest
 
-from src.core.queries import QueryBuilder
+from src.core.db.queries import QueryBuilder
 
 
 def test_paramless_constants_are_sql_params_tuples():

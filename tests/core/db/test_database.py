@@ -1,5 +1,5 @@
 import pytest
-from src.core.database import OSMDatabase
+from src.core.db.database import OSMDatabase
 
 
 def test_database_connection_and_query(temp_sqlite):

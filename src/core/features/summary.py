@@ -12,8 +12,8 @@ from typing import Mapping
 
 import pandas as pd
 
-from src.core.queries import QueryBuilder
-from src.core.types import DB
+from src.core.db.queries import QueryBuilder
+from src.core.db.types import DB
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from typing import Callable, Optional, Tuple
 
-from src.core.pipeline import ProgressCb
+from src.core.pipeline.pipeline import ProgressCb
 
 
 def make_progress_reporter(

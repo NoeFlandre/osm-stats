@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.core.summary import GlobalSummary, SummaryBuilder
+from src.core.features.summary import GlobalSummary, SummaryBuilder
 
 
 class FakeDB:

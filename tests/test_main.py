@@ -4,9 +4,9 @@
 import sqlite3
 
 from src.config import DEFAULT_OUTPUT_DIR, resolve_db_path
-from src.core.cache import read_cache_df
-from src.core.database import OSMDatabase
-from src.core.pipeline import build_feature_cache, build_summary, run
+from src.core.storage.cache import read_cache_df
+from src.core.db.database import OSMDatabase
+from src.core.pipeline.pipeline import build_feature_cache, build_summary, run
 
 
 def test_resolve_db_path_uses_env_in_main(monkeypatch, tmp_path):

@@ -1,7 +1,7 @@
-"""Tests for the CLI argument parser of ``src.cli``."""
+"""Tests for the CLI argument parser of ``src.cli.cli``."""
 from pathlib import Path
 
-from src.cli import parse_args
+from src.cli.cli import parse_args
 
 
 def test_parse_args_default():

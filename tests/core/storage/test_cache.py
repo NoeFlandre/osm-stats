@@ -2,7 +2,7 @@ import sqlite3
 
 import pandas as pd
 
-from src.core.cache import (
+from src.core.storage.cache import (
     CACHE_SCHEMA,
     build_cache_db_streaming,
     read_cache_df,
