@@ -106,16 +106,15 @@ def build_cache_db_streaming(
 def read_cache_df(
     cache_path: Union[str, Path],
     min_count: int | None = None,
+    limit: int | None = None,
 ) -> pd.DataFrame:
-    """Read the tag_features table as a DataFrame, optionally filtered by count."""
+    """Read the tag_features table as a DataFrame, optionally filtered by count and capped by *limit*."""
     cache_path = Path(cache_path)
     if min_count is None:
-        sql = (
-            "SELECT key, value, count_all, feature FROM tag_features "
-            "ORDER BY count_all DESC;"
-        )
-        params: tuple = ()
+        sql, params = QueryBuilder.tag_features_select_all(limit=limit)
     else:
-        sql, params = QueryBuilder.tag_features_select(min_count=min_count)
+        sql, params = QueryBuilder.tag_features_select(
+            min_count=min_count, limit=limit
+        )
     with sqlite3.connect(cache_path) as conn:
         return pd.read_sql_query(sql, conn, params=params)

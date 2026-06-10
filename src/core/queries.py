@@ -69,19 +69,36 @@ class QueryBuilder:
     )
 
     TAG_FEATURES_INDEX = (
-        "CREATE INDEX IF NOT EXISTS idx_features_count "
-        "ON tag_features(count_all DESC);",
+        "CREATE INDEX idx_features_count ON tag_features(count_all DESC);",
         (),
     )
 
     @staticmethod
-    def tag_features_select(min_count: int) -> Tuple[str, tuple]:
-        """Select tag_features rows with ``count_all >= min_count``, ordered DESC."""
+    def tag_features_select(
+        min_count: int, limit: int | None = None
+    ) -> Tuple[str, tuple]:
+        """Select tag_features rows with ``count_all >= min_count``, ordered DESC.
+
+        If *limit* is set, the result is capped to that many rows.
+        """
         sql = (
             "SELECT key, value, count_all, feature FROM tag_features "
-            "WHERE count_all >= ? ORDER BY count_all DESC;"
+            "WHERE count_all >= ? ORDER BY count_all DESC"
         )
-        return sql, (min_count,)
+        if limit is None:
+            return sql + ";", (min_count,)
+        return sql + " LIMIT ?;", (min_count, limit)
+
+    @staticmethod
+    def tag_features_select_all(limit: int | None = None) -> Tuple[str, tuple]:
+        """Select all tag_features rows, ordered DESC. Optional *limit* cap."""
+        sql = (
+            "SELECT key, value, count_all, feature FROM tag_features "
+            "ORDER BY count_all DESC"
+        )
+        if limit is None:
+            return sql + ";", ()
+        return sql + " LIMIT ?;", (limit,)
 
     @staticmethod
     def select_tag_values(key: str, limit: int = 50) -> Tuple[str, tuple]:

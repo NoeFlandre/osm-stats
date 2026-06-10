@@ -13,7 +13,7 @@ from typing import Mapping
 import pandas as pd
 
 from src.core.queries import QueryBuilder
-from src.io.exporter import DB
+from src.core.types import DB
 
 
 @dataclass(frozen=True)

@@ -1,12 +1,12 @@
-"""Tests for the orchestration in ``src.main`` (the ``run`` and
-``build_feature_cache`` functions), excluding CLI parsing which lives in
+"""Tests for the orchestration in ``src.core.pipeline`` (the ``run`` and
+``build_feature_cache`` functions). CLI parsing tests live in
 ``tests/test_cli.py``."""
 import sqlite3
 
 from src.config import DEFAULT_OUTPUT_DIR, resolve_db_path
 from src.core.cache import read_cache_df
 from src.core.database import OSMDatabase
-from src.main import build_feature_cache, build_summary, run
+from src.core.pipeline import build_feature_cache, build_summary, run
 
 
 def test_resolve_db_path_uses_env_in_main(monkeypatch, tmp_path):

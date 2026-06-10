@@ -76,6 +76,34 @@ def test_read_cache_df_supports_min_count_filter(tmp_path):
     assert set(df["key"]) == {"a", "b"}
 
 
+def test_read_cache_df_supports_limit(tmp_path):
+    out = tmp_path / "cache.sqlite"
+    build_cache_db_streaming(
+        FakeStreamingDB([(f"k{i}", f"v{i}", 1_000 - i) for i in range(10)]),
+        out,
+        min_count=500,
+        batch_size=10,
+    )
+    df = read_cache_df(out, limit=3)
+    assert len(df) == 3
+    assert list(df["value"]) == ["v0", "v1", "v2"]
+
+
+def test_read_cache_df_min_count_and_limit_compose(tmp_path):
+    out = tmp_path / "cache.sqlite"
+    build_cache_db_streaming(
+        FakeStreamingDB(
+            [("a", "x", 2_000), ("b", "y", 1_500), ("c", "z", 800), ("d", "w", 600)]
+        ),
+        out,
+        min_count=500,
+        batch_size=10,
+    )
+    df = read_cache_df(out, min_count=1_000, limit=1)
+    assert len(df) == 1
+    assert df.iloc[0]["value"] == "x"
+
+
 def test_cache_schema_constant_matches_table():
     assert "CREATE TABLE" in CACHE_SCHEMA
     assert "tag_features" in CACHE_SCHEMA

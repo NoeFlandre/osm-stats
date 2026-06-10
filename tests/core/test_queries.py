@@ -24,6 +24,34 @@ def test_tag_features_select_query_filters_by_min_count():
     assert params == (500,)
 
 
+def test_tag_features_index_uses_bare_create():
+    # The cache builder always recreates the file from scratch, so the
+    # index SQL must be the bare form (no IF NOT EXISTS needed).
+    sql, _ = QueryBuilder.TAG_FEATURES_INDEX
+    assert "CREATE INDEX" in sql
+    assert "IF NOT EXISTS" not in sql
+    assert "ON tag_features(count_all DESC)" in sql
+
+
+def test_tag_features_select_with_limit():
+    sql, params = QueryBuilder.tag_features_select(min_count=500, limit=10)
+    assert "LIMIT ?" in sql
+    assert params == (500, 10)
+
+
+def test_tag_features_select_all_no_filter():
+    sql, params = QueryBuilder.tag_features_select_all()
+    assert "tag_features" in sql
+    assert "count_all >=" not in sql
+    assert params == ()
+
+
+def test_tag_features_select_all_with_limit():
+    sql, params = QueryBuilder.tag_features_select_all(limit=5)
+    assert "LIMIT ?" in sql
+    assert params == (5,)
+
+
 def test_first_tags_by_min_count_no_upper_bound():
     sql, params = QueryBuilder.first_tags_by_min_count(500, 1000)
     assert "count_all >= ?" in sql
