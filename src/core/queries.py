@@ -61,6 +61,25 @@ class QueryBuilder:
         """
         return sql, (key, limit)
 
+    @staticmethod
+    def tags_by_min_count(
+        min_count: int = 500, limit: int | None = None
+    ) -> Tuple[str, tuple]:
+        """All (key, value) pairs with ``count_all >= min_count``, ordered DESC.
+
+        Used as the long-tail filter at the start of the analysis pipeline.
+        If *limit* is set, the result is capped to that many rows.
+        """
+        sql = """
+        SELECT key, value, count_all
+        FROM tags
+        WHERE count_all >= ?
+        ORDER BY count_all DESC
+        """
+        if limit is None:
+            return sql + ";", (min_count,)
+        return sql + "LIMIT ?;", (min_count, limit)
+
 
 def get_tag_values_query(key: str, limit: int = 50) -> str:
     """.. deprecated::
