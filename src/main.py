@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 from pathlib import Path
 from database import OSMDatabase
 import queries
@@ -17,6 +18,31 @@ def main():
     except FileNotFoundError as e:
         print(f"Error: {e}")
         return
+
+    print("Extracting global aggregates...")
+    df_key_agg = db.execute_query(queries.GLOBAL_KEY_AGGREGATES_QUERY)
+    df_tag_agg = db.execute_query(queries.GLOBAL_TAG_AGGREGATES_QUERY)
+    
+    summary_data = {
+        "metric": [
+            "total_distinct_keys", 
+            "total_key_occurrences", 
+            "total_distinct_tags", 
+            "total_tag_occurrences"
+        ],
+        "value": [
+            df_key_agg["total_distinct_keys"].iloc[0],
+            df_key_agg["total_key_occurrences"].iloc[0],
+            df_tag_agg["total_distinct_tags"].iloc[0],
+            df_tag_agg["total_tag_occurrences"].iloc[0]
+        ]
+    }
+    df_summary = pd.DataFrame(summary_data)
+    df_summary.to_csv(OUTPUT_DIR / "global_summary.csv", index=False)
+    
+    print("\n--- Global Summary ---")
+    print(df_summary.to_string(index=False))
+    print("----------------------\n")
 
     # 1. Extract Metadata
     print("Extracting metadata...")
