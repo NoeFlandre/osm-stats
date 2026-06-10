@@ -1,3 +1,14 @@
+def get_tag_values_query(key: str, limit: int = 50) -> str:
+    return f"""
+    SELECT 
+        value, 
+        count_all 
+    FROM tags 
+    WHERE key = '{key}' 
+    ORDER BY count_all DESC 
+    LIMIT {limit};
+    """
+
 TOP_KEYS_QUERY = """
 SELECT 
     key, 
