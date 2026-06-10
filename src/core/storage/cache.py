@@ -20,6 +20,7 @@ from typing import Callable, Union
 import pandas as pd
 
 from src.core.db.queries import QueryBuilder
+from src.core.features.base_key import parse_base_key
 from src.core.features.standardize import standardize_dataframe
 
 CACHE_SCHEMA = """
@@ -110,11 +111,62 @@ def read_cache_df(
 ) -> pd.DataFrame:
     """Read the tag_features table as a DataFrame, optionally filtered by count and capped by *limit*."""
     cache_path = Path(cache_path)
-    if min_count is None:
-        sql, params = QueryBuilder.tag_features_select_all(limit=limit)
-    else:
-        sql, params = QueryBuilder.tag_features_select(
-            min_count=min_count, limit=limit
-        )
     with sqlite3.connect(cache_path) as conn:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(tag_features)").fetchall()}
+        with_base_key = "base_key" in cols
+        if min_count is None:
+            sql, params = QueryBuilder.tag_features_select_all(
+                limit=limit, with_base_key=with_base_key
+            )
+        else:
+            sql, params = QueryBuilder.tag_features_select(
+                min_count=min_count, limit=limit, with_base_key=with_base_key
+            )
         return pd.read_sql_query(sql, conn, params=params)
+
+
+def add_base_key_column(cache_path: Union[str, Path]) -> None:
+    """Add (or replace) a ``base_key`` column on the ``tag_features`` table.
+
+    The base key is the OSM key namespace root (everything before the
+    first colon) extracted from the ``feature`` column. The function is
+    idempotent: a second call updates the column in place. The new column
+    makes it trivial to whitelist or blacklist entire tag families
+    (e.g. ``base_key IN ('landuse', 'natural')``) without re-running the
+    pipeline.
+
+    Implementation: a single SQL UPDATE that extracts the base key with
+    a SQLite expression on the ``feature`` column. This keeps the
+    operation O(n) with no Python-side per-row round-trips.
+    """
+    cache_path = Path(cache_path)
+    with sqlite3.connect(cache_path) as conn:
+        cols = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(tag_features)").fetchall()
+        }
+        if "base_key" not in cols:
+            conn.execute("ALTER TABLE tag_features ADD COLUMN base_key TEXT")
+        # SUBSTR(feature, 1, INSTR(feature, '|') - 1) gives us the key
+        # portion; the first colon truncates it to the namespace root.
+        # LOWER + TRIM normalize the value to match what parse_base_key
+        # would produce in Python.
+        conn.execute(
+            """
+            UPDATE tag_features
+            SET base_key = LOWER(TRIM(
+                CASE
+                    WHEN INSTR(feature, ':') > 0
+                         AND INSTR(feature, ':') < INSTR(feature, '|')
+                    THEN SUBSTR(feature, 1, INSTR(feature, ':') - 1)
+                    ELSE SUBSTR(feature, 1, INSTR(feature, '|') - 1)
+                END
+            ))
+            WHERE base_key IS NULL
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_features_base_key "
+            "ON tag_features(base_key)"
+        )
+        conn.commit()

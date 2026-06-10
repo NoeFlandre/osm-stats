@@ -75,14 +75,18 @@ class QueryBuilder:
 
     @staticmethod
     def tag_features_select(
-        min_count: int, limit: int | None = None
+        min_count: int, limit: int | None = None, with_base_key: bool = False
     ) -> Tuple[str, tuple]:
         """Select tag_features rows with ``count_all >= min_count``, ordered DESC.
 
-        If *limit* is set, the result is capped to that many rows.
+        If *limit* is set, the result is capped to that many rows. The
+        ``base_key`` column is only included in the projection when
+        *with_base_key* is True (the column is added by
+        :func:`src.core.storage.cache.add_base_key_column`).
         """
+        cols = "key, value, count_all, feature, base_key" if with_base_key else "key, value, count_all, feature"
         sql = (
-            "SELECT key, value, count_all, feature FROM tag_features "
+            f"SELECT {cols} FROM tag_features "
             "WHERE count_all >= ? ORDER BY count_all DESC"
         )
         if limit is None:
@@ -90,12 +94,10 @@ class QueryBuilder:
         return sql + " LIMIT ?;", (min_count, limit)
 
     @staticmethod
-    def tag_features_select_all(limit: int | None = None) -> Tuple[str, tuple]:
+    def tag_features_select_all(limit: int | None = None, with_base_key: bool = False) -> Tuple[str, tuple]:
         """Select all tag_features rows, ordered DESC. Optional *limit* cap."""
-        sql = (
-            "SELECT key, value, count_all, feature FROM tag_features "
-            "ORDER BY count_all DESC"
-        )
+        cols = "key, value, count_all, feature, base_key" if with_base_key else "key, value, count_all, feature"
+        sql = f"SELECT {cols} FROM tag_features ORDER BY count_all DESC"
         if limit is None:
             return sql + ";", ()
         return sql + " LIMIT ?;", (limit,)
