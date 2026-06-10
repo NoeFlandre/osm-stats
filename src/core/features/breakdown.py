@@ -73,3 +73,15 @@ def render_breakdown_markdown(df: pd.DataFrame) -> str:
         ]
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
+
+
+def write_breakdown_artifact(output_path: Path) -> Path:
+    """Write the env/agri breakdown as a Markdown artifact on disk.
+
+    Returns the path that was written.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df = env_agri_breakdown_df()
+    output_path.write_text(render_breakdown_markdown(df) + "\n")
+    return output_path
