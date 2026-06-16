@@ -2,15 +2,15 @@
 
 The two pipelines each persist two artifacts on disk:
 
-* ``output/cluster_profile.md`` (TF-IDF) or
-  ``output/cluster_profile_embeddings.md`` (Embeddings) - a Markdown
-  table with one row per base-key family and the columns
-  ``base_key``, ``cluster_count``, ``total_count_all``,
-  ``representative_medoids``.
-* ``output/cluster_medoids.csv`` (TF-IDF) or
-  ``output/cluster_medoids_embeddings.csv`` (Embeddings) - one row per
-  real cluster (and a noise bucket) with the columns
-  ``cluster_id``, ``medoid_feature``, ``cluster_size``,
+* ``output/filter_first/tfidf/cluster_profile.md`` (TF-IDF) or
+  ``output/filter_first/embeddings/cluster_profile_embeddings.md``
+  (Embeddings) - a Markdown table with one row per base-key family
+  and the columns ``base_key``, ``cluster_count``,
+  ``total_count_all``, ``representative_medoids``.
+* ``output/filter_first/tfidf/cluster_medoids.csv`` (TF-IDF) or
+  ``output/filter_first/embeddings/cluster_medoids_embeddings.csv``
+  (Embeddings) - one row per real cluster (and a noise bucket) with
+  the columns ``cluster_id``, ``medoid_feature``, ``cluster_size``,
   ``total_count_all``.
 
 This module reads those artifacts back, joins them on ``base_key``,

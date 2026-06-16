@@ -1,7 +1,7 @@
 """The env/agri breakdown must produce one row per real cluster for
 the whitelisted base keys, sourced from a persisted per-cluster
-medoid file (``output/cluster_medoids.parquet``) that carries the
-true per-cluster occurrence total.
+medoid file (``output/filter_first/tfidf/cluster_medoids.csv``) that
+carries the true per-cluster occurrence total.
 
 The breakdown is built bottom-up from the cluster medoid file (not
 the cluster profile Markdown), so each row reflects one real cluster
@@ -19,7 +19,7 @@ from src.core.features.breakdown import (
 )
 
 
-MEDOIDS_PATH = Path("output/cluster_medoids.csv")
+MEDOIDS_PATH = Path("output/filter_first/tfidf/cluster_medoids.csv")
 
 
 # --- medoid file existence ---------------------------------------------

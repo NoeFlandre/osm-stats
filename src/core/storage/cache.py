@@ -6,10 +6,23 @@ that contains only the rows above the ``count_all`` threshold, with the
 standardized ``feature`` column already computed. All downstream stages
 (clustering, taxonomy, blog plots) read from this cache instead.
 
-:func:`build_cache_db_streaming` pages through the source DB in fixed-size
-batches using a keyset on ``count_all``, committing after each batch. This
-bounds memory usage and lets the build resume across disconnects on a 14 GB
-source.
+Two build modes are exposed:
+
+* :func:`build_cache_db_streaming` — **filter-first**: pages through the
+  source DB in fixed-size batches, dropping ``count_all < min_count`` rows
+  before standardizing. This is the cheap, fast path.
+* :func:`build_cache_db_standardize_first` — **standardize-first**:
+  groups the entire ``tags`` table by the standardized
+  ``(key, value)`` pair in SQL, sums ``count_all`` within each group, then
+  keeps only the groups whose sum reaches ``min_count``. This rescues
+  rows that would have been dropped by the filter-first path (e.g.
+  ``landuse`` and ``Landuse`` separately under the threshold collapse to
+  one group over the threshold). It is significantly slower on the
+  192 M-row source because SQLite must aggregate the full table.
+
+Both functions write the same ``CACHE_SCHEMA`` and are interchangeable
+downstream: :func:`read_cache_df` and :func:`add_base_key_column` work
+identically on the output of either.
 """
 from __future__ import annotations
 
@@ -35,6 +48,23 @@ CREATE TABLE tag_features (
 
 
 ProgressCb = Callable[[int, int | None], None]  # (rows_written_so_far, last_count_all)
+
+
+# SQL expression that mirrors src.core.features.standardize._normalize_column
+# for the case statement. Empty-after-trim strings become 'none' (the
+# missing-value token). The two halves are joined with '|' as the delimiter.
+# This expression is the GROUP BY key for the standardize-first path.
+STANDARDIZED_KEY_EXPR = (
+    "CASE WHEN LOWER(TRIM(key))   = '' THEN 'none' "
+    "ELSE LOWER(TRIM(key)) END"
+)
+STANDARDIZED_VALUE_EXPR = (
+    "CASE WHEN LOWER(TRIM(value)) = '' THEN 'none' "
+    "ELSE LOWER(TRIM(value)) END"
+)
+STANDARDIZED_FEATURE_EXPR = (
+    f"{STANDARDIZED_KEY_EXPR} || '|' || {STANDARDIZED_VALUE_EXPR}"
+)
 
 
 def build_cache_db_streaming(
@@ -100,6 +130,98 @@ def build_cache_db_streaming(
         # Build the index after the bulk load - faster than per-batch.
         conn.execute(QueryBuilder.TAG_FEATURES_INDEX[0])
         conn.commit()
+
+    return output_path
+
+
+def build_cache_db_standardize_first(
+    source_db_path: Union[str, Path],
+    output_path: Union[str, Path],
+    min_count: int = 500,
+    progress: ProgressCb | None = None,
+) -> Path:
+    """Build the cache with **standardize-first** ordering.
+
+    The source DB must expose a ``tags`` table with columns
+    ``(key TEXT, value TEXT, count_all INTEGER)`` (the canonical
+    taginfo schema). The function:
+
+    1. ``GROUP BY`` the standardized ``(key, value)`` expression
+       (``LOWER(TRIM(...))`` with empty -> ``"none"``, joined with
+       ``|``).
+    2. ``SUM(count_all)`` within each group, so typos and case
+       variants collapse to a single row with the merged volume.
+    3. ``HAVING SUM(count_all) >= min_count`` to keep only the
+       groups that reach the threshold once merged.
+    4. ``INSERT`` each surviving group into the new ``tag_features``
+       table.
+
+    The whole aggregation is one ``INSERT ... SELECT ... GROUP BY``
+    statement, so SQLite handles the work in a single pass over the
+    source ``tags`` table. On the 192 M-row source this is materially
+    slower than :func:`build_cache_db_streaming` (which streams and
+    drops uninteresting rows before any aggregation), but it rescues
+    rows whose standardized form would have cleared the threshold only
+    after merging with their near-duplicates.
+
+    Parameters
+    ----------
+    source_db_path:
+        Path to the source SQLite database (the taginfo download).
+    output_path:
+        Path to write the new cache. Any existing file is replaced.
+    min_count:
+        Minimum merged ``count_all`` to keep a group (default 500).
+    progress:
+        Optional ``(rows_written, last_count_all)`` callback. Because
+        the SQL aggregation is a single statement, only the final
+        ``(n_rows, None)`` is reported (no incremental ticks). For
+        fine-grained progress, time the call and report "done".
+
+    Returns the path that was written.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists():
+        output_path.unlink()
+
+    if progress is not None:
+        progress(0, None)
+
+    with sqlite3.connect(output_path) as out_conn:
+        out_conn.executescript(CACHE_SCHEMA)
+        # ATTACH the source DB so the GROUP BY below can read its
+        # ``tags`` table from the same connection. We qualify every
+        # reference as ``src.tags`` to make the data flow explicit.
+        # The DETACH is implicit: closing out_conn below releases the
+        # attachment. Calling DETACH explicitly is unreliable on
+        # in-memory or freshly-created source DBs (it can race with
+        # SQLite's lock cleanup).
+        out_conn.execute(f"ATTACH DATABASE ? AS src", (str(source_db_path),))
+        out_conn.execute(
+            f"""
+            INSERT INTO tag_features (key, value, count_all, feature)
+            SELECT
+                {STANDARDIZED_KEY_EXPR}        AS std_key,
+                {STANDARDIZED_VALUE_EXPR}      AS std_value,
+                SUM(count_all)                 AS merged_count,
+                {STANDARDIZED_FEATURE_EXPR}    AS std_feature
+            FROM src.tags
+            GROUP BY {STANDARDIZED_FEATURE_EXPR}
+            HAVING SUM(count_all) >= ?
+            """,
+            (min_count,),
+        )
+        # Build the index after the bulk load - faster than per-row.
+        out_conn.execute(QueryBuilder.TAG_FEATURES_INDEX[0])
+        out_conn.commit()
+
+        n_rows = out_conn.execute(
+            "SELECT COUNT(*) FROM tag_features"
+        ).fetchone()[0]
+
+    if progress is not None:
+        progress(int(n_rows), None)
 
     return output_path
 

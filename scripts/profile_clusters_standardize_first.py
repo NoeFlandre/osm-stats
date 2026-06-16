@@ -1,16 +1,12 @@
-"""End-to-end: cache -> TF-IDF -> SVD -> HDBSCAN -> medoids -> profile -> markdown.
+"""End-to-end TF-IDF pipeline on the **standardize-first** cache.
 
-This is the **filter-first** pipeline variant (cache built by
-filtering ``count_all >= 500`` first, then standardizing per row).
-The parallel **standardize-first** variant lives in
-``scripts/profile_clusters_standardize_first.py`` and writes under
-``output/standardize_first/tfidf/``.
-
-Outputs land in ``output/filter_first/tfidf/``. The cross-pipeline
-report lives in ``output/filter_first/comparison/``.
+Shape-equivalent to ``scripts/profile_clusters.py`` (the filter-first
+TF-IDF pipeline), but reads the standardize-first cache and writes
+to ``output/standardize_first/tfidf/``. The two TF-IDF outputs are
+first-class and never overwrite each other.
 
 Run with:
-    .venv/bin/python -m scripts.profile_clusters
+    .venv/bin/python -m scripts.profile_clusters_standardize_first
 """
 import time
 from pathlib import Path
@@ -24,9 +20,9 @@ from src.core.features.render import render_profile_markdown
 from src.core.features.tfidf import build_char_tfidf_matrix
 from src.core.storage.cache import read_cache_df
 
-CACHE = "/Volumes/Seagate M3/tag_features.sqlite"
-OUTPUT = Path("output/filter_first/tfidf/cluster_profile.md")
-MEMBERSHIPS_OUTPUT = Path("output/filter_first/tfidf/cluster_memberships.csv")
+CACHE = "/Volumes/Seagate M3/tag_features_standardize_first.sqlite"
+OUTPUT = Path("output/standardize_first/tfidf/cluster_profile.md")
+MEMBERSHIPS_OUTPUT = Path("output/standardize_first/tfidf/cluster_memberships.csv")
 MIN_COUNT = 500
 
 
@@ -77,10 +73,9 @@ def main() -> None:
     medoids.to_csv(medoids_path, index=False)
     print(f"wrote: {medoids_path}  rows: {len(medoids):,}")
 
-    # Persist the per-tag cluster membership CSV: one row per cache tag
-    # with its cluster assignment (including the noise bucket, label -1).
-    # This is the raw, unfiltered output of HDBSCAN: no LLM, no env/agri
-    # whitelist. The user reads this file to decide which clusters to keep.
+    # Per-tag membership CSV: one row per cache tag with its cluster
+    # assignment. This is the raw, unfiltered output of HDBSCAN: no
+    # LLM, no env/agri filter.
     t0 = time.time()
     memberships_path = save_cluster_memberships(labels, df, MEMBERSHIPS_OUTPUT)
     print(f"memberships: {time.time()-t0:.1f}s  wrote: {memberships_path}")

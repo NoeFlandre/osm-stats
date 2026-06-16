@@ -1,30 +1,13 @@
-"""End-to-end: cache -> embeddings -> SVD -> HDBSCAN -> medoids -> profile -> markdown.
+"""End-to-end embeddings pipeline on the **standardize-first** cache.
 
-This is the embedding-based counterpart of
-``scripts/profile_clusters.py``. It is shape-equivalent: the same
-five stages, the same outputs, but driven by a static vector model
-(``potion-base-8M``) instead of character n-gram TF-IDF.
-
-This is the **filter-first** pipeline variant. The parallel
-**standardize-first** variant lives in
-``scripts/profile_clusters_embeddings_standardize_first.py`` and
-writes under ``output/standardize_first/embeddings/``.
-
-The script writes to *different* output paths than the TF-IDF
-script so the two pipelines can be run back-to-back without
-clobbering each other's artifacts:
-
-    TF-IDF   :  output/filter_first/tfidf/cluster_profile.md
-                output/filter_first/tfidf/cluster_medoids.csv
-                output/filter_first/tfidf/env_agri_breakdown.md
-                output/filter_first/tfidf/cluster_memberships.csv
-    Embedding:  output/filter_first/embeddings/cluster_profile_embeddings.md
-                output/filter_first/embeddings/cluster_medoids_embeddings.csv
-                output/filter_first/embeddings/env_agri_breakdown_embeddings.md
-                output/filter_first/embeddings/cluster_memberships_embeddings.csv
+Shape-equivalent to ``scripts/profile_clusters_embeddings.py`` (the
+filter-first embeddings pipeline), but reads the standardize-first
+cache and writes to ``output/standardize_first/embeddings/``. The
+two embeddings outputs are first-class and never overwrite each
+other.
 
 Run with:
-    .venv/bin/python -m scripts.profile_clusters_embeddings
+    .venv/bin/python -m scripts.profile_clusters_embeddings_standardize_first
 """
 import time
 from pathlib import Path
@@ -34,8 +17,8 @@ import pandas as pd
 from src.core.features.embedding.runner import run
 
 
-CACHE = "/Volumes/Seagate M3/tag_features.sqlite"
-OUTPUT_DIR = Path("output/filter_first/embeddings")
+CACHE = "/Volumes/Seagate M3/tag_features_standardize_first.sqlite"
+OUTPUT_DIR = Path("output/standardize_first/embeddings")
 MIN_COUNT = 500
 
 
@@ -43,7 +26,7 @@ def main() -> None:
     wall_start = time.time()
     banner = "=" * 60
     print(banner)
-    print("embedding pipeline: cache -> embed -> SVD -> HDBSCAN -> medoids")
+    print("embedding pipeline (standardize-first cache)")
     print(banner)
     print(f"cache: {CACHE}")
     print(f"output_dir: {OUTPUT_DIR}")
@@ -80,9 +63,7 @@ def main() -> None:
 
     print(f"total wall time: {time.time() - wall_start:.1f}s")
 
-    # Top-20 of the profile, for human inspection. We re-read the
-    # persisted medoid CSV and the persisted profile Markdown to
-    # avoid keeping the in-memory profile_df around.
+    # Top-20 of the profile, for human inspection.
     print()
     print("-" * 60)
     print("top 20 base keys (from medoids CSV)")

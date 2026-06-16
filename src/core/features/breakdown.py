@@ -1,9 +1,10 @@
 """Per-cluster breakdown for the env/agri whitelist.
 
 The cluster step persists a per-cluster medoid file
-(``output/cluster_medoids.csv``) with one row per real cluster. The
-breakdown filters that file to the whitelisted env/agri base keys and
-renders it as a Markdown table with one row per cluster.
+(``output/filter_first/tfidf/cluster_medoids.csv``) with one row per
+real cluster. The breakdown filters that file to the whitelisted
+env/agri base keys and renders it as a Markdown table with one row
+per cluster.
 
 Each row carries the real per-cluster ``cluster_id`` and the real
 per-cluster ``total_count_all`` (the sum of ``count_all`` across the
@@ -21,7 +22,7 @@ from src.core.features.env_agri_whitelist import ENVI_AGRI_BASE_KEYS
 from src.core.features.render import _escape_cell  # reuse the escape helper
 
 
-MEDOIDS_PATH = Path("output/cluster_medoids.csv")
+MEDOIDS_PATH = Path("output/filter_first/tfidf/cluster_medoids.csv")
 
 
 def _load_medoids() -> pd.DataFrame:

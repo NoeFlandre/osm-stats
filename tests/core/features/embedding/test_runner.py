@@ -120,7 +120,7 @@ _DEFAULT_ROWS = [
 # ---------------------------------------------------------------------
 
 
-def test_run_writes_three_artifacts(tmp_path: Path):
+def test_run_writes_four_artifacts(tmp_path: Path):
     cache = _build_cache_sqlite(tmp_path / "cache.sqlite", _DEFAULT_ROWS)
     out_dir = tmp_path / "out"
     fake = _FakeEmbedder(dim=64, n_groups=3)
@@ -135,13 +135,16 @@ def test_run_writes_three_artifacts(tmp_path: Path):
     profile = out_dir / "cluster_profile_embeddings.md"
     medoids = out_dir / "cluster_medoids_embeddings.csv"
     breakdown = out_dir / "env_agri_breakdown_embeddings.md"
+    memberships = out_dir / "cluster_memberships_embeddings.csv"
 
     assert profile.exists()
     assert medoids.exists()
     assert breakdown.exists()
+    assert memberships.exists()
     assert profile.stat().st_size > 0
     assert medoids.stat().st_size > 0
     assert breakdown.stat().st_size > 0
+    assert memberships.stat().st_size > 0
 
 
 # ---------------------------------------------------------------------
@@ -173,6 +176,7 @@ def test_run_returns_summary_dict_with_all_keys(tmp_path: Path):
         "profile_path",
         "medoids_path",
         "breakdown_path",
+        "memberships_path",
     }
     assert expected_keys.issubset(set(summary.keys()))
 
@@ -198,6 +202,7 @@ def test_run_returns_summary_dict_with_all_keys(tmp_path: Path):
     assert isinstance(summary["profile_path"], _P)
     assert isinstance(summary["medoids_path"], _P)
     assert isinstance(summary["breakdown_path"], _P)
+    assert isinstance(summary["memberships_path"], _P)
 
 
 # ---------------------------------------------------------------------
@@ -387,15 +392,17 @@ def test_run_handles_empty_cache_gracefully(tmp_path: Path):
     assert summary["medoid_count"] == 0
     assert summary["noise_ratio"] == 0.0
 
-    # The three artifact files must exist (as zero-byte or
+    # The four artifact files must exist (as zero-byte or
     # header-only files). Downstream stages that do
     # ``path.read_text()`` must not crash with FileNotFoundError.
     profile = out_dir / "cluster_profile_embeddings.md"
     medoids = out_dir / "cluster_medoids_embeddings.csv"
     breakdown = out_dir / "env_agri_breakdown_embeddings.md"
+    memberships = out_dir / "cluster_memberships_embeddings.csv"
     assert profile.exists()
     assert medoids.exists()
     assert breakdown.exists()
+    assert memberships.exists()
 
 
 # ---------------------------------------------------------------------
@@ -444,6 +451,7 @@ def test_real_model_end_to_end(tmp_path: Path):
     assert (out_dir / "cluster_profile_embeddings.md").exists()
     assert (out_dir / "cluster_medoids_embeddings.csv").exists()
     assert (out_dir / "env_agri_breakdown_embeddings.md").exists()
+    assert (out_dir / "cluster_memberships_embeddings.csv").exists()
 
 
 # ---------------------------------------------------------------------
@@ -491,3 +499,56 @@ def test_embedding_breakdown_reads_from_embedding_medoid_csv(tmp_path: Path):
     # TF-IDF single-row file (different cluster_ids).
     assert len(embed_medoids) >= 1
     assert embed_medoids["cluster_id"].tolist() != [0]
+
+
+# ---------------------------------------------------------------------
+# 9. Memberships: the runner writes a per-tag cluster membership CSV
+#    (the raw, unfiltered HDBSCAN output) alongside the medoid file
+# ---------------------------------------------------------------------
+
+
+def test_run_memberships_csv_one_row_per_tag_with_no_filtering(tmp_path: Path):
+    """The membership CSV must have one row per tag in the cache and
+    must include every cluster label HDBSCAN produced (including the
+    noise bucket when noise is present). The runner never applies the
+    env/agri whitelist or any LLM filter.
+    """
+    cache = _build_cache_sqlite(tmp_path / "cache.sqlite", _DEFAULT_ROWS)
+    out_dir = tmp_path / "out"
+    fake = _FakeEmbedder(dim=64, n_groups=3)
+
+    summary = run(
+        cache_path=cache,
+        output_dir=out_dir,
+        min_count=500,
+        embedder=fake,
+    )
+
+    memberships = pd.read_csv(out_dir / "cluster_memberships_embeddings.csv")
+
+    # One row per cache tag. Nothing filtered out.
+    assert len(memberships) == summary["n_tags"]
+    # The schema must match the contract from
+    # src.core.features.cluster_memberships.MEMBERSHIPS_COLUMNS.
+    expected_cols = [
+        "cluster_id",
+        "base_key",
+        "key",
+        "value",
+        "feature",
+        "count_all",
+    ]
+    assert list(memberships.columns) == expected_cols
+    # Every cluster_id produced by HDBSCAN must appear in the file.
+    # The noise bucket is included when present; the contract here is
+    # "no tag is dropped", not "noise must exist".
+    distinct_ids = set(memberships["cluster_id"].astype(int).tolist())
+    medoids = pd.read_csv(out_dir / "cluster_medoids_embeddings.csv")
+    medoid_ids = set(medoids["cluster_id"].astype(int).tolist())
+    # Real cluster ids (non-noise) must appear in the memberships.
+    assert medoid_ids - {-1} <= distinct_ids
+    # base_key must be populated for every row.
+    assert memberships["base_key"].notna().all()
+    # The sum of count_all across the membership file must equal the
+    # sum of count_all across the input rows.
+    assert int(memberships["count_all"].sum()) == sum(c for _, _, c in _DEFAULT_ROWS)

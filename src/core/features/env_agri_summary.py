@@ -1,7 +1,8 @@
 """Aggregate stats over the env/agri per-cluster breakdown.
 
 The numbers come straight from the persisted per-cluster medoid file
-(``output/cluster_medoids.csv``) filtered to the env/agri whitelist.
+(``output/filter_first/tfidf/cluster_medoids.csv``) filtered to the
+env/agri whitelist.
 Two semantics are exposed:
 
 * ``total_occurrences`` - the sum of per-cluster ``total_count_all``

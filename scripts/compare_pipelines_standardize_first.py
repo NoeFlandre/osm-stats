@@ -1,19 +1,12 @@
-"""One-off script: build and write the TF-IDF vs Embeddings comparison artifact.
+"""TF-IDF vs Embeddings comparison on the **standardize-first** cache.
 
-Reads the four pipeline artifacts (two per pipeline), joins them via
-the ``src.core.features.embedding.comparison`` module, and writes a
-single Markdown report to ``output/filter_first/comparison/pipeline_comparison.md``.
-
-This is the **filter-first** variant. The parallel **standardize-first**
-variant lives in ``scripts/compare_pipelines_standardize_first.py`` and
-writes under ``output/standardize_first/comparison/``.
+Reads the four pipeline artifacts (two per pipeline) from
+``output/standardize_first/``, joins them via
+``src.core.features.embedding.comparison``, and writes a single
+Markdown report to ``output/standardize_first/comparison/pipeline_comparison.md``.
 
 Run with:
-    .venv/bin/python -m scripts.compare_pipelines
-
-This is a runnable script, not a library function. The underlying
-comparison module has its own test suite (``tests/core/features/embedding
-/test_comparison.py``); this script is just glue.
+    .venv/bin/python -m scripts.compare_pipelines_standardize_first
 """
 from pathlib import Path
 
@@ -26,11 +19,11 @@ from src.core.features.embedding.comparison import (
 )
 
 
-TFIDF_PROFILE = Path("output/filter_first/tfidf/cluster_profile.md")
-TFIDF_MEDOIDS = Path("output/filter_first/tfidf/cluster_medoids.csv")
-EMBED_PROFILE = Path("output/filter_first/embeddings/cluster_profile_embeddings.md")
-EMBED_MEDOIDS = Path("output/filter_first/embeddings/cluster_medoids_embeddings.csv")
-COMPARISON_OUT = Path("output/filter_first/comparison/pipeline_comparison.md")
+TFIDF_PROFILE = Path("output/standardize_first/tfidf/cluster_profile.md")
+TFIDF_MEDOIDS = Path("output/standardize_first/tfidf/cluster_medoids.csv")
+EMBED_PROFILE = Path("output/standardize_first/embeddings/cluster_profile_embeddings.md")
+EMBED_MEDOIDS = Path("output/standardize_first/embeddings/cluster_medoids_embeddings.csv")
+COMPARISON_OUT = Path("output/standardize_first/comparison/pipeline_comparison.md")
 
 
 def main() -> None:
@@ -45,12 +38,13 @@ def main() -> None:
     )
 
     md = render_comparison_markdown(comparison_df, env_agri_df)
+    COMPARISON_OUT.parent.mkdir(parents=True, exist_ok=True)
     COMPARISON_OUT.write_text(md)
 
     print(f"comparison rows: {len(comparison_df)}")
     print(f"env/agri rows:   {len(env_agri_df)}")
     print()
-    print("top 10 base keys by combined volume (cluster_count_delta, total_count_all_delta):")
+    print("top 10 base keys by combined volume:")
     print(
         comparison_df.head(10)[
             [

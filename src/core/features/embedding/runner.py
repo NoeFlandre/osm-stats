@@ -42,6 +42,7 @@ from typing import Any, Callable, Optional, Union
 import pandas as pd
 
 from src.core.features.base_key import parse_base_key
+from src.core.features.cluster_memberships import save_cluster_memberships
 from src.core.features.env_agri_whitelist import ENVI_AGRI_BASE_KEYS
 from src.core.features.render import _escape_cell, render_profile_markdown
 
@@ -52,6 +53,7 @@ from src.core.features.render import _escape_cell, render_profile_markdown
 PROFILE_FILENAME = "cluster_profile_embeddings.md"
 MEDOIDS_FILENAME = "cluster_medoids_embeddings.csv"
 BREAKDOWN_FILENAME = "env_agri_breakdown_embeddings.md"
+MEMBERSHIPS_FILENAME = "cluster_memberships_embeddings.csv"
 
 DEFAULT_MODEL_NAME = "minishlab/potion-base-8M"
 DEFAULT_BATCH_SIZE = 4096
@@ -223,7 +225,8 @@ def run(
         Summary with keys ``n_tags``, ``embed_seconds``,
         ``svd_seconds``, ``hdbscan_seconds``, ``medoid_count``,
         ``n_clusters``, ``n_noise``, ``noise_ratio``,
-        ``profile_path``, ``medoids_path``, ``breakdown_path``.
+        ``profile_path``, ``medoids_path``, ``breakdown_path``,
+        ``memberships_path``.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -269,12 +272,15 @@ def run(
         # would crash; we return an empty result instead.
         empty_md = ""
         empty_csv = "cluster_id,medoid_feature,cluster_size,total_count_all\n"
+        empty_memberships = "cluster_id,base_key,key,value,feature,count_all\n"
         profile_path = output_dir / PROFILE_FILENAME
         medoids_path = output_dir / MEDOIDS_FILENAME
         breakdown_path = output_dir / BREAKDOWN_FILENAME
+        memberships_path = output_dir / MEMBERSHIPS_FILENAME
         profile_path.write_text(empty_md)
         medoids_path.write_text(empty_csv)
         breakdown_path.write_text(empty_md)
+        memberships_path.write_text(empty_memberships)
         return {
             "n_tags": 0,
             "embed_seconds": 0.0,
@@ -287,6 +293,7 @@ def run(
             "profile_path": profile_path,
             "medoids_path": medoids_path,
             "breakdown_path": breakdown_path,
+            "memberships_path": memberships_path,
         }
 
     # 3a. Embed
@@ -319,10 +326,11 @@ def run(
     medoid_count = int(len(medoids_df))
     noise_ratio = float(n_noise / n_tags) if n_tags > 0 else 0.0
 
-    # 4. Write the three artifacts.
+    # 4. Write the four artifacts.
     profile_path = output_dir / PROFILE_FILENAME
     medoids_path = output_dir / MEDOIDS_FILENAME
     breakdown_path = output_dir / BREAKDOWN_FILENAME
+    memberships_path = output_dir / MEMBERSHIPS_FILENAME
 
     profile_md = render_profile_markdown(profile_df)
     profile_path.write_text(profile_md + "\n" if profile_md else "")
@@ -332,6 +340,12 @@ def run(
     breakdown_df = _build_env_agri_breakdown_df(medoids_path)
     breakdown_md = _render_embedding_breakdown_markdown(breakdown_df)
     breakdown_path.write_text(breakdown_md + "\n" if breakdown_md else "")
+
+    # Per-tag membership CSV: one row per cache tag with its cluster
+    # assignment. This is the raw, unfiltered output of HDBSCAN: the
+    # env/agri filter is never applied here. The user reads this file
+    # to decide which clusters to keep.
+    save_cluster_memberships(labels, df, memberships_path)
 
     return {
         "n_tags": n_tags,
@@ -345,4 +359,5 @@ def run(
         "profile_path": profile_path,
         "medoids_path": medoids_path,
         "breakdown_path": breakdown_path,
+        "memberships_path": memberships_path,
     }
