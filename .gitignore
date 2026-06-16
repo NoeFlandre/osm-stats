@@ -10,3 +10,10 @@ env/
 
 # Output directory
 output/
+
+# Local staging dir for the HF bucket (canonical copy lives at
+# hf://buckets/NoeFlandre/osm_stats; this dir is a working copy
+# the user can ignore).
+data/caches/
+data/outputs/
+data/MANIFEST.md
