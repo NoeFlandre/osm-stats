@@ -116,21 +116,23 @@ def _aggregate_source_db_by_lower(
 
     if cache_exists:
         # Attach the cache as a side DB, then use it as a filter.
-        # The cache has 225,684 rows of lowercased (key, value).
-        # The JOIN uses LOWER on the source side; SQLite does a
-        # hash join which is fast.
+        # The cache has 225,684 rows of standardized (key, value)
+        # (LOWER+TRIM). The JOIN must use the same standardization
+        # expression as the cache, otherwise rows with leading or
+        # trailing whitespace are missed.
         db.execute(f"ATTACH DATABASE ? AS cache", (str(cache_path),))
         sql = """
             SELECT
-                LOWER(t.key)   AS key,
-                LOWER(t.value) AS value,
+                LOWER(TRIM(t.key))   AS key,
+                LOWER(TRIM(t.value)) AS value,
                 SUM(t.count_nodes)     AS count_nodes,
                 SUM(t.count_ways)      AS count_ways,
                 SUM(t.count_relations) AS count_relations
             FROM main.tags AS t
             JOIN cache.tag_features AS c
-              ON c.key = LOWER(t.key) AND c.value = LOWER(t.value)
-            GROUP BY LOWER(t.key), LOWER(t.value)
+              ON c.key = LOWER(TRIM(t.key))
+             AND c.value = LOWER(TRIM(t.value))
+            GROUP BY LOWER(TRIM(t.key)), LOWER(TRIM(t.value))
         """
         try:
             return pd.read_sql_query(sql, db)
@@ -140,13 +142,13 @@ def _aggregate_source_db_by_lower(
         # Fallback: full table scan. Slow but correct.
         sql = """
             SELECT
-                LOWER(key)   AS key,
-                LOWER(value) AS value,
+                LOWER(TRIM(key))   AS key,
+                LOWER(TRIM(value)) AS value,
                 SUM(count_nodes)     AS count_nodes,
                 SUM(count_ways)      AS count_ways,
                 SUM(count_relations) AS count_relations
             FROM tags
-            GROUP BY LOWER(key), LOWER(value)
+            GROUP BY LOWER(TRIM(key)), LOWER(TRIM(value))
         """
         return pd.read_sql_query(sql, db)
 
@@ -245,10 +247,13 @@ def supercluster_element_type_stats(
             con.close()
 
     # 4. Join cluster members to the source DB on (key, value). The
-    #    cluster_memberships are already lowercased, so a plain join
-    #    finds the right element-type split (case variants were
-    #    folded in step 3). Missing matches become 0 below. When
-    #    real_mem is empty (no real clusters), skip the join.
+    #    cluster_memberships are already SQLite-LOWER+TRIM (same
+    #    case-folding as the source-DB aggregate), so a plain join
+    #    finds the right element-type split. Note: SQLite's LOWER
+    #    is ASCII-only, so non-ASCII characters (e.g. Cyrillic,
+    #    German umlauts) keep their original case on both sides
+    #    and the join still matches. Missing matches become 0
+    #    below. When real_mem is empty (no real clusters), skip.
     if real_mem.empty:
         joined = pd.DataFrame()
     else:
@@ -261,24 +266,51 @@ def supercluster_element_type_stats(
             joined[col] = joined[col].fillna(0).astype("int64")
 
     # 5. Group by supercluster base key and sum.
-    if joined.empty:
+    #
+    #    count_all / n_tags / n_clusters come from the cluster
+    #    memberships: each member row is a separate (cluster_id, key,
+    #    value) contribution, and sum / count / nunique is the right
+    #    thing.
+    #
+    #    count_nodes / count_ways / count_relations come from the
+    #    source-DB aggregate, which is a property of the tag itself
+    #    (not of the cluster). If the same (key, value) appears in
+    #    several clusters within the same supercluster, the
+    #    source-DB value must be counted ONCE, not once per cluster.
+    #    We dedup on (supercluster_bk, key, value) before summing.
+    if real_mem.empty:
         grouped = pd.DataFrame(columns=[
             "base_key", "n_clusters", "n_tags", "count_all",
             "count_nodes", "count_ways", "count_relations",
         ])
     else:
         grouped = (
-            joined.groupby("supercluster_bk", as_index=False)
+            real_mem.groupby("supercluster_bk", as_index=False)
             .agg(
                 n_clusters=("cluster_id", "nunique"),
                 n_tags=("feature", "count"),
                 count_all=("count_all", "sum"),
-                count_nodes=("count_nodes", "sum"),
-                count_ways=("count_ways", "sum"),
-                count_relations=("count_relations", "sum"),
             )
             .rename(columns={"supercluster_bk": "base_key"})
         )
+        if not joined.empty:
+            etype = (
+                joined.drop_duplicates(subset=["supercluster_bk", "key", "value"])
+                .groupby("supercluster_bk", as_index=False)
+                .agg(
+                    count_nodes=("count_nodes", "sum"),
+                    count_ways=("count_ways", "sum"),
+                    count_relations=("count_relations", "sum"),
+                )
+                .rename(columns={"supercluster_bk": "base_key"})
+            )
+            grouped = grouped.merge(etype, on="base_key", how="left")
+            for col in ("count_nodes", "count_ways", "count_relations"):
+                grouped[col] = grouped[col].fillna(0).astype("int64")
+        else:
+            grouped["count_nodes"] = 0
+            grouped["count_ways"] = 0
+            grouped["count_relations"] = 0
 
     # 6. Percentages and is_polygon_friendly. count_all is the sum of
     #    cluster_memberships.count_all, so it is always > 0 when

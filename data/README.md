@@ -23,7 +23,7 @@ The bucket lives at
 ### Element-type analysis
 
 `outputs/standardize_first/tfidf/element_type_stats.csv` carries the
-element-type breakdown of the 44 manually-kept env/agri superclusters
+element-type breakdown of the 157 manually-kept superclusters
 in two views, side by side:
 
 - `sc_*` columns: **per-supercluster** view (noise excluded). One
@@ -31,7 +31,7 @@ in two views, side by side:
   Computed by `src.core.db.supercluster_element_type_stats` from
   the cluster_memberships CSV, joined to the source DB for
   element-type split. This is the primary view for the env/agri
-  study: the 44 kept base keys are superclusters, so the right
+  study: the 157 kept base keys are superclusters, so the right
   unit of analysis is the cluster-membership rollup, not the
   global base-key rollup.
 - `src_*` columns: **per-base-key** view (source-DB rollup). One
@@ -45,22 +45,23 @@ has the same `sc_*` columns appended after the user's manual
 
 #### Per-supercluster numbers (noise excluded, cluster-member rollup)
 
-| | Polygon-friendly | Point-heavy | All 44 |
+| | Polygon-friendly | Point-heavy | All 157 |
 |---|---:|---:|---:|
-| Base keys (superclusters) | **33 / 44 (75.0 %)** | 11 / 44 (25.0 %) | 44 |
-| Occurrences | **126,656,240 (62.7 %)** | 75,443,140 (37.3 %) | 202,099,380 |
-| Tags (cluster members) | **746 (38.5 %)** | 1,193 (61.5 %) | 1,939 |
+| Base keys (superclusters) | **110 / 157 (70.1 %)** | 47 / 157 (29.9 %) | 157 |
+| Occurrences | **1,061,684,644 (90.9 %)** | 105,791,583 (9.1 %) | 1,167,476,227 |
+| Tags (cluster members) | **12,504 (84.2 %)** | 2,354 (15.8 %) | 14,858 |
+| Real clusters | **670 (78.0 %)** | 189 (22.0 %) | 859 |
 
 `is_polygon_friendly` is `(count_ways + count_relations) / count_all >= 0.5`,
 exposed as `POLYGON_FRIENDLY_THRESHOLD` in
-`src/core/db/element_type_stats.py`. The 11 point-heavy
-superclusters include the 9 obvious point-only base keys
-(`tree`, `tumulus`, `species`, `taxon`, `seamark`, `place`,
-`product`, `geobasenhn`) plus 2 that flipped from the source-DB
-view: `natural` (lots of `natural=tree` nodes in the cluster
-members) and `removed` (its cluster members are mostly nodes).
-The CSV does **not** address polygon size; that requires a
-PBF extract and a separate step.
+`src/core/db/element_type_stats.py`. The CSV does **not** address
+polygon size; that requires a PBF extract and a separate step.
+
+These numbers are independently verified by
+`tests/core/db/test_supercluster_stats_audit.py` (33 / 33
+tests pass), which re-computes every metric two independent
+ways from the raw input files and asserts they match the
+function's output.
 | `scripts/` | The 12 pipeline scripts, copied verbatim from `scripts/` in the GitHub repo | ~30 KB |
 | `reproducibility/` | A single shell script that rebuilds the bucket from a fresh checkout | ~1 KB |
 | `MANIFEST.md` | Per-file inventory: every file in the bucket, its size and a sha256 prefix | — |

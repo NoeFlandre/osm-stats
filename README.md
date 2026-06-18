@@ -104,9 +104,9 @@ See `data/reproducibility/reproduce.sh` for the exact 7-step recipe.
 
 The XLSX (`output/standardize_first/tfidf/base_key_families.xlsx`)
 and CSV (`output/standardize_first/tfidf/element_type_stats.csv`)
-both carry an element-type breakdown for the 44 manually-kept
-env/agri base keys. They are computed by two complementary
-functions in `src/core/db/`:
+both carry an element-type breakdown for the 157 manually-kept
+base keys. They are computed by two complementary functions in
+`src/core/db/`:
 
 - `element_type_stats` (per-base-key, source-DB rollup): for every
   (key, value) pair in the source `taginfo.sqlite` whose key's
@@ -118,7 +118,7 @@ functions in `src/core/db/`:
   union. Noise (cluster_id = -1) is excluded.
 
 The per-supercluster view is the right unit of analysis for this
-study because the 44 base keys you labeled are *superclusters* —
+study because the 157 base keys you labeled are *superclusters* —
 one row in the XLSX represents a group of clusters, not a global
 base-key rollup. A supercluster can contain members with different
 own base keys than the supercluster's own (e.g. a cluster with
@@ -127,23 +127,28 @@ and it does not contain source rows that ended up in noise.
 
 ### Per-supercluster numbers (noise excluded, cluster-member rollup)
 
-| | Polygon-friendly | Point-heavy | All 44 |
+| | Polygon-friendly | Point-heavy | All 157 |
 |---|---:|---:|---:|
-| Base keys (superclusters) | **33 / 44 (75.0 %)** | 11 / 44 (25.0 %) | 44 |
-| Occurrences | **126,656,240 (62.7 %)** | 75,443,140 (37.3 %) | 202,099,380 |
-| Tags (cluster members) | **746 (38.5 %)** | 1,193 (61.5 %) | 1,939 |
+| Base keys (superclusters) | **110 / 157 (70.1 %)** | 47 / 157 (29.9 %) | 157 |
+| Occurrences | **1,061,684,644 (90.9 %)** | 105,791,583 (9.1 %) | 1,167,476,227 |
+| Tags (cluster members) | **12,504 (84.2 %)** | 2,354 (15.8 %) | 14,858 |
+| Real clusters | **670 (78.0 %)** | 189 (22.0 %) | 859 |
 
 `is_polygon_friendly` is `(count_ways + count_relations) / count_all >= 0.5`,
 exposed as `POLYGON_FRIENDLY_THRESHOLD` in
-`src/core/db/element_type_stats.py`. The 11 point-heavy
-superclusters include the 9 obvious point-only base keys
-(`tree`, `tumulus`, `species`, `taxon`, `seamark`, `place`,
-`product`, `geobasenhn`) plus 2 that flipped from the
-source-DB view: `natural` (its supercluster has a lot of
-`natural=tree` points), and `removed` (50/50 nodes/ways in
-source DB, but its cluster members are mostly nodes). The CSV
-does **not** address polygon size; that requires a PBF extract
-and a separate step.
+`src/core/db/element_type_stats.py`. The CSV does **not** address
+polygon size; that requires a PBF extract and a separate step.
+
+These numbers are independently verified by
+`tests/core/db/test_supercluster_stats_audit.py`, which
+re-computes every metric two ways from the raw input files and
+asserts they match the function's output. The audit caught
+three real bugs that earlier outputs had (double-counting of
+source-DB element-type counts when the same (key, value) appears
+in multiple clusters within a supercluster; missing `TRIM()`
+in the source-DB aggregate; Cyrillic/German-umlaut case-mismatch
+when re-lowercasing in Python with `str.lower()`). 33 / 33 tests
+pass.
 
 ## Caveats
 
