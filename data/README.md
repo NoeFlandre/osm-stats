@@ -43,6 +43,31 @@ The XLSX (`outputs/standardize_first/tfidf/base_key_families.xlsx`)
 has the same `sc_*` columns appended after the user's manual
 `keep` column. The `keep` column is preserved as-is.
 
+#### How the 157 kept compare to the full 427 superclusters
+
+The TF-IDF pipeline produced 8,832 real clusters + 78,270 noise
+points from the 225,684 standardized tags in the cache. The
+non-noise 147,414 tags cover 2,246,255,835 occurrences; the noise
+78,270 tags cover another 1,122,085,693. Together the 225,684
+tags in the cluster memberships file cover the 3,368,341,528
+occurrences reported in the blog post.
+
+| | Tags | Occurrences | Real clusters |
+|---|---:|---:|---:|
+| All cluster memberships (incl. noise) | **225,684** | 3,368,341,528 | 8,832 |
+| &nbsp;&nbsp;Real clusters (noise excluded) | 147,414 | 2,246,255,835 | 8,832 |
+| &nbsp;&nbsp;Noise (cluster_id = -1) | 78,270 | 1,122,085,693 | — |
+| Real, by base-key label (157 yes kept) | **14,858** | **1,167,476,227** | **859** |
+| Real, by base-key label (270 not-kept: 54 uncertain + 216 no) | 132,556 | 1,078,779,608 | 7,973 |
+
+So the 157 "yes" labels cover 10.1 % of all real-cluster tags
+(14,858 / 147,414) and 52.0 % of all real-cluster occurrences
+(1,167,476,227 / 2,246,255,835), but only 9.7 % of the clusters
+(859 / 8,832). The kept superclusters are the high-volume ones
+(`building`, `highway`, `landuse`, `natural`, `tiger`, `area`,
+`surface`, `water`, `wetland`, etc.) — the long tail of small,
+specialized base keys was filtered out by the manual labeling.
+
 #### Per-supercluster numbers (noise excluded, cluster-member rollup)
 
 | | Polygon-friendly | Point-heavy | All 157 |
