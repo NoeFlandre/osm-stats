@@ -102,11 +102,11 @@ See `data/reproducibility/reproduce.sh` for the exact 7-step recipe.
 
 ## Element-type analysis
 
-The XLSX (`output/standardize_first/tfidf/base_key_families.xlsx`)
-and CSV (`output/standardize_first/tfidf/element_type_stats.csv`)
-both carry an element-type breakdown for the 157 manually-kept
-base keys. They are computed by two complementary functions in
-`src/core/db/`:
+The XLSX (`output/standardize_first/{tfidf,embeddings}/base_key_families.xlsx`)
+and CSV (`output/standardize_first/{tfidf,embeddings}/element_type_stats.csv`)
+both carry an element-type breakdown for the manually-kept base keys
+(157 for TF-IDF, 169 for embeddings). They are computed by two
+complementary functions in `src/core/db/`:
 
 - `element_type_stats` (per-base-key, source-DB rollup): for every
   (key, value) pair in the source `taginfo.sqlite` whose key's
@@ -118,14 +118,14 @@ base keys. They are computed by two complementary functions in
   union. Noise (cluster_id = -1) is excluded.
 
 The per-supercluster view is the right unit of analysis for this
-study because the 157 base keys you labeled are *superclusters* —
-one row in the XLSX represents a group of clusters, not a global
-base-key rollup. A supercluster can contain members with different
-own base keys than the supercluster's own (e.g. a cluster with
-medoid `tree|species:oak` may also contain `forest|species:oak`),
-and it does not contain source rows that ended up in noise.
+study because the labeled base keys are *superclusters* — one row
+in the XLSX represents a group of clusters, not a global base-key
+rollup. A supercluster can contain members with different own base
+keys than the supercluster's own (e.g. a cluster with medoid
+`tree|species:oak` may also contain `forest|species:oak`), and it
+does not contain source rows that ended up in noise.
 
-### How the 157 kept compare to the full 427 superclusters
+### TF-IDF pipeline — 157 kept out of 427 superclusters
 
 The TF-IDF pipeline produced 8,832 real clusters + 78,270 noise
 points from the 225,684 standardized tags in the cache. The
@@ -150,7 +150,36 @@ So the 157 "yes" labels cover 10.1 % of all real-cluster tags
 `surface`, `water`, `wetland`, etc.) — the long tail of small,
 specialized base keys was filtered out by the manual labeling.
 
+### Embeddings pipeline — 169 kept out of 433 superclusters
+
+The embeddings pipeline (potion-base-8M) produced 4,954 real
+clusters + 106,498 noise points from the same 225,684 standardized
+tags. The non-noise 119,186 tags cover 2,565,137,600 occurrences;
+the noise 106,498 tags cover another 803,203,928. The embeddings
+clusters are fewer and larger than TF-IDF's, and the noise fraction
+is higher.
+
+| | Tags | Occurrences | Real clusters |
+|---|---:|---:|---:|
+| All cluster memberships (incl. noise) | **225,684** | 3,368,341,528 | 4,954 |
+| &nbsp;&nbsp;Real clusters (noise excluded) | 119,186 | 2,565,137,600 | 4,954 |
+| &nbsp;&nbsp;Noise (cluster_id = -1) | 106,498 | 803,203,928 | — |
+| Real, by base-key label (169 yes kept) | **17,612** | **978,614,046** | **511** |
+| Real, by base-key label (264 not-kept: 57 uncertain + 207 no) | 101,574 | 1,586,523,554 | 4,443 |
+
+The 169 "yes" labels cover 14.8 % of all real-cluster tags
+(17,612 / 119,186) and 38.2 % of all real-cluster occurrences
+(978,614,046 / 2,565,137,600), but only 10.3 % of the clusters
+(511 / 4,954). The kept superclusters are similar to TF-IDF
+(`building`, `highway`, `natural`, `tiger`, `landuse`, etc.) but
+with semantic-cluster members: e.g. embeddings place `natural=water`,
+`natural=wetland`, `natural=wood`, `natural=tree`, `natural=scrub`
+together in one cluster because they describe environmental
+features.
+
 ### Per-supercluster numbers (noise excluded, cluster-member rollup)
+
+#### TF-IDF (157 kept)
 
 | | Polygon-friendly | Point-heavy | All 157 |
 |---|---:|---:|---:|
@@ -159,21 +188,35 @@ specialized base keys was filtered out by the manual labeling.
 | Tags (cluster members) | **12,504 (84.2 %)** | 2,354 (15.8 %) | 14,858 |
 | Real clusters | **670 (78.0 %)** | 189 (22.0 %) | 859 |
 
+#### Embeddings (169 kept)
+
+| | Polygon-friendly | Point-heavy | All 169 |
+|---|---:|---:|---:|
+| Base keys (superclusters) | **118 / 169 (69.8 %)** | 51 / 169 (30.2 %) | 169 |
+| Occurrences | **798,138,011 (81.6 %)** | 180,476,035 (18.4 %) | 978,614,046 |
+| Tags (cluster members) | **15,683 (89.0 %)** | 1,929 (11.0 %) | 17,612 |
+| Real clusters | **359 (70.3 %)** | 152 (29.7 %) | 511 |
+
 `is_polygon_friendly` is `(count_ways + count_relations) / count_all >= 0.5`,
 exposed as `POLYGON_FRIENDLY_THRESHOLD` in
-`src/core/db/element_type_stats.py`. The CSV does **not** address
+`src/core/db/element_type_stats.py`. The CSVs do **not** address
 polygon size; that requires a PBF extract and a separate step.
 
-These numbers are independently verified by
-`tests/core/db/test_supercluster_stats_audit.py`, which
-re-computes every metric two ways from the raw input files and
-asserts they match the function's output. The audit caught
-three real bugs that earlier outputs had (double-counting of
-source-DB element-type counts when the same (key, value) appears
-in multiple clusters within a supercluster; missing `TRIM()`
-in the source-DB aggregate; Cyrillic/German-umlaut case-mismatch
-when re-lowercasing in Python with `str.lower()`). 33 / 33 tests
-pass.
+These numbers are independently verified by:
+
+- `tests/core/db/test_supercluster_stats_audit.py` (TF-IDF pipeline)
+- `tests/core/db/test_embeddings_supercluster_stats_audit.py` (embeddings pipeline)
+
+Each suite re-computes every metric two ways from the raw input
+files and asserts they match the function's output. The TF-IDF
+audit caught three real bugs that earlier outputs had
+(double-counting of source-DB element-type counts when the same
+(key, value) appears in multiple clusters within a supercluster;
+missing `TRIM()` in the source-DB aggregate; Cyrillic/German-umlaut
+case-mismatch when re-lowercasing in Python with `str.lower()`).
+The embeddings audit verifies the same function on the embeddings
+artifacts. 45 / 45 tests pass (22 unit + 11 TF-IDF audit + 12
+embeddings audit).
 
 ## Caveats
 

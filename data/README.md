@@ -22,16 +22,18 @@ The bucket lives at
 
 ### Element-type analysis
 
-`outputs/standardize_first/tfidf/element_type_stats.csv` carries the
-element-type breakdown of the 157 manually-kept superclusters
-in two views, side by side:
+`outputs/standardize_first/tfidf/element_type_stats.csv` and
+`outputs/standardize_first/embeddings/element_type_stats.csv`
+carry the element-type breakdown of the manually-kept
+superclusters (157 for TF-IDF, 169 for embeddings) in two views,
+side by side:
 
 - `sc_*` columns: **per-supercluster** view (noise excluded). One
   row per supercluster = one row per base key in the XLSX.
   Computed by `src.core.db.supercluster_element_type_stats` from
   the cluster_memberships CSV, joined to the source DB for
   element-type split. This is the primary view for the env/agri
-  study: the 157 kept base keys are superclusters, so the right
+  study: the kept base keys are superclusters, so the right
   unit of analysis is the cluster-membership rollup, not the
   global base-key rollup.
 - `src_*` columns: **per-base-key** view (source-DB rollup). One
@@ -39,11 +41,11 @@ in two views, side by side:
   from the source `taginfo.sqlite`. This is a flat pre-clustering
   view that includes source rows that ended up in noise.
 
-The XLSX (`outputs/standardize_first/tfidf/base_key_families.xlsx`)
-has the same `sc_*` columns appended after the user's manual
+The XLSX files (`outputs/standardize_first/{tfidf,embeddings}/base_key_families.xlsx`)
+have the same `sc_*` columns appended after the user's manual
 `keep` column. The `keep` column is preserved as-is.
 
-#### How the 157 kept compare to the full 427 superclusters
+#### TF-IDF pipeline — 157 kept out of 427 superclusters
 
 The TF-IDF pipeline produced 8,832 real clusters + 78,270 noise
 points from the 225,684 standardized tags in the cache. The
@@ -60,7 +62,7 @@ occurrences reported in the blog post.
 | Real, by base-key label (157 yes kept) | **14,858** | **1,167,476,227** | **859** |
 | Real, by base-key label (270 not-kept: 54 uncertain + 216 no) | 132,556 | 1,078,779,608 | 7,973 |
 
-So the 157 "yes" labels cover 10.1 % of all real-cluster tags
+The 157 "yes" labels cover 10.1 % of all real-cluster tags
 (14,858 / 147,414) and 52.0 % of all real-cluster occurrences
 (1,167,476,227 / 2,246,255,835), but only 9.7 % of the clusters
 (859 / 8,832). The kept superclusters are the high-volume ones
@@ -68,7 +70,29 @@ So the 157 "yes" labels cover 10.1 % of all real-cluster tags
 `surface`, `water`, `wetland`, etc.) — the long tail of small,
 specialized base keys was filtered out by the manual labeling.
 
+#### Embeddings pipeline — 169 kept out of 433 superclusters
+
+The embeddings pipeline (potion-base-8M) produced 4,954 real
+clusters + 106,498 noise points from the same 225,684 standardized
+tags. The non-noise 119,186 tags cover 2,565,137,600 occurrences;
+the noise 106,498 tags cover another 803,203,928.
+
+| | Tags | Occurrences | Real clusters |
+|---|---:|---:|---:|
+| All cluster memberships (incl. noise) | **225,684** | 3,368,341,528 | 4,954 |
+| &nbsp;&nbsp;Real clusters (noise excluded) | 119,186 | 2,565,137,600 | 4,954 |
+| &nbsp;&nbsp;Noise (cluster_id = -1) | 106,498 | 803,203,928 | — |
+| Real, by base-key label (169 yes kept) | **17,612** | **978,614,046** | **511** |
+| Real, by base-key label (264 not-kept: 57 uncertain + 207 no) | 101,574 | 1,586,523,554 | 4,443 |
+
+The 169 "yes" labels cover 14.8 % of all real-cluster tags
+(17,612 / 119,186) and 38.2 % of all real-cluster occurrences
+(978,614,046 / 2,565,137,600), but only 10.3 % of the clusters
+(511 / 4,954).
+
 #### Per-supercluster numbers (noise excluded, cluster-member rollup)
+
+##### TF-IDF (157 kept)
 
 | | Polygon-friendly | Point-heavy | All 157 |
 |---|---:|---:|---:|
@@ -77,16 +101,27 @@ specialized base keys was filtered out by the manual labeling.
 | Tags (cluster members) | **12,504 (84.2 %)** | 2,354 (15.8 %) | 14,858 |
 | Real clusters | **670 (78.0 %)** | 189 (22.0 %) | 859 |
 
+##### Embeddings (169 kept)
+
+| | Polygon-friendly | Point-heavy | All 169 |
+|---|---:|---:|---:|
+| Base keys (superclusters) | **118 / 169 (69.8 %)** | 51 / 169 (30.2 %) | 169 |
+| Occurrences | **798,138,011 (81.6 %)** | 180,476,035 (18.4 %) | 978,614,046 |
+| Tags (cluster members) | **15,683 (89.0 %)** | 1,929 (11.0 %) | 17,612 |
+| Real clusters | **359 (70.3 %)** | 152 (29.7 %) | 511 |
+
 `is_polygon_friendly` is `(count_ways + count_relations) / count_all >= 0.5`,
 exposed as `POLYGON_FRIENDLY_THRESHOLD` in
-`src/core/db/element_type_stats.py`. The CSV does **not** address
+`src/core/db/element_type_stats.py`. The CSVs do **not** address
 polygon size; that requires a PBF extract and a separate step.
 
-These numbers are independently verified by
-`tests/core/db/test_supercluster_stats_audit.py` (33 / 33
-tests pass), which re-computes every metric two independent
-ways from the raw input files and asserts they match the
-function's output.
+These numbers are independently verified by:
+
+- `tests/core/db/test_supercluster_stats_audit.py` (TF-IDF pipeline, 11 tests)
+- `tests/core/db/test_embeddings_supercluster_stats_audit.py` (embeddings pipeline, 12 tests)
+
+Each suite re-computes every metric two ways from the raw input
+files and asserts they match the function's output.
 | `scripts/` | The 12 pipeline scripts, copied verbatim from `scripts/` in the GitHub repo | ~30 KB |
 | `reproducibility/` | A single shell script that rebuilds the bucket from a fresh checkout | ~1 KB |
 | `MANIFEST.md` | Per-file inventory: every file in the bucket, its size and a sha256 prefix | — |
