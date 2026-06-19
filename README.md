@@ -243,3 +243,4 @@ embeddings audit).
 - HF bucket: <https://huggingface.co/buckets/NoeFlandre/osm_stats>
 - Embedding model: [`potion-base-8M`](https://huggingface.co/minishlab/potion-base-8M) (Minish Lab, via `model2vec`)
 - Taginfo source: <https://taginfo.openstreetmap.org/download>
+- Slide deck: https://docs.google.com/presentation/d/1Y9k-aA3YEvLMJ6-FwFmAznAucEltVeEf5vPKTD6zcN0/edit?usp=sharing
