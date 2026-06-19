@@ -14,13 +14,13 @@ The full writeup is in the companion blog post:
 
 - `src/` — the library code (cache builder, TF-IDF, SVD, HDBSCAN, embeddings runner, profile / render / compare).
 - `scripts/` — the 12 pipeline scripts (filter-first + standardize-first, × 2 pipelines). Run with `python -m scripts.<name>`.
-- `tests/` — 227 unit tests.
+- `tests/` — 260 unit tests.
 - `data/` — local staging area for the [HF bucket](https://huggingface.co/buckets/NoeFlandre/osm_stats). The bucket is the canonical home of every output; `data/` is the working copy used to push to it. The bucket-only files (`MANIFEST.md`, the two caches, all `outputs/`) are gitignored.
 - `output/` — working directory. The pipelines write here. Gitignored. Identical contents to `data/outputs/`.
 
 ## What's in the Hugging Face bucket
 
-[`hf://buckets/NoeFlandre/osm_stats`](https://huggingface.co/buckets/NoeFlandre/osm_stats) — 47 files, ~106 MB.
+[`hf://buckets/NoeFlandre/osm_stats`](https://huggingface.co/buckets/NoeFlandre/osm_stats) — 49 files, ~106 MB.
 
 | | |
 |---|---|
